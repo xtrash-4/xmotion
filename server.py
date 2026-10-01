@@ -512,7 +512,7 @@ async def get_project_xml(url: str, project: str = None):
             query_params["project"] = project
         remote_api = "https://am.zervida.my.id/api/project-xml?" + urllib.parse.urlencode(query_params)
         req = urllib.request.Request(remote_api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         if not isinstance(data, dict) or not data.get("xml"):
             raise ValueError("respons remote tidak berisi xml")

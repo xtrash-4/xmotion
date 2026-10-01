@@ -613,27 +613,70 @@ document.addEventListener('DOMContentLoaded', () => {
           customUrlAmPickRow.style.display = 'none';
         }
 
-        // 4. Trigger mesin WebGL engine untuk memuat preset secara langsung
-        showAmStatus('loading', 'Memuat preset ke mesin WebGL...', projectTitle);
-        
+        // 4. Siapkan file XML dari respon server dan render langsung ke WebGL Engine
+        showAmStatus('loading', 'Menyusun scene ke mesin WebGL...', projectTitle);
+        const fixed = (typeof fixPathRectMediaShapes === 'function') 
+          ? fixPathRectMediaShapes(data.xml) 
+          : { xml: data.xml, count: 0 };
+        const finalXmlText = fixed.xml;
+        const finalXmlName = data.xmlName || `${(projectTitle || 'preset').replace(/[^a-zA-Z0-9._-]/g, '_')}.xml`;
+        const xmlFile = new File([finalXmlText], finalXmlName, { type: 'text/xml' });
+
+        // Daftarkan slot media klip preset ke sistem CapCut UI
+        if (typeof registerXmlMediaUsage === 'function') {
+          registerXmlMediaUsage(finalXmlText, [finalXmlName]);
+        }
+
+        // Sinkronkan ke input file #impXml
+        const impXml = document.getElementById('impXml');
+        if (impXml) {
+          const dt = new DataTransfer();
+          dt.items.add(xmlFile);
+          impXml.files = dt.files;
+        }
+
+        // Muat File XML ke engine WebGL secara langsung di memori tanpa request ulang
         let loadedViaApi = false;
         if (window.AM && typeof window.AM.loadPreset === 'function') {
           try {
-            await window.AM.loadPreset(link, selectedProject || data.xmlName);
+            await window.AM.loadPreset(xmlFile);
             if (typeof window.AM.waitReady === 'function') {
-              await window.AM.waitReady(25000);
+              await window.AM.waitReady(10000);
             }
             loadedViaApi = true;
           } catch (loadErr) {
-            console.warn('[window.AM.loadPreset error, mencoba fallback input]', loadErr);
+            console.warn('[window.AM.loadPreset(xmlFile) error, mencoba trigger impXml]', loadErr);
           }
         }
 
-        if (!loadedViaApi && urlAmGo) {
-          if (selectedProject && urlAmPick) {
-            urlAmPick.value = selectedProject;
+        if (!loadedViaApi && impXml) {
+          impXml.__xmlFixed = true;
+          try {
+            impXml.dispatchEvent(new Event('change', { bubbles: true }));
+          } finally {
+            impXml.__xmlFixed = false;
           }
-          urlAmGo.click();
+        }
+
+        // Otomatis pasang musik jika preset membawa audio
+        const audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+        if (audioItem && audioItem.url) {
+          try {
+            const aResp = await fetch(audioItem.url);
+            if (aResp.ok) {
+              const aBlob = await aResp.blob();
+              const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp3', { type: audioItem.mime || 'audio/mp3' });
+              const impPhoto = document.getElementById('impPhoto');
+              if (impPhoto) {
+                const dtAudio = new DataTransfer();
+                dtAudio.items.add(aFile);
+                impPhoto.files = dtAudio.files;
+                impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }
+          } catch (aErr) {
+            console.warn('[Auto Audio Load Warning]', aErr);
+          }
         }
 
         // 5. Monitor status loading engine dan sinkronisasi
@@ -662,8 +705,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const slotNum = slots.length || mediaList.length;
           const audioNote = hasAudio 
-            ? `${slotNum} media otomatis terpasang. Siap dimainkan.` 
-            : `Preset dimuat (${slotNum} klip) tanpa audio bawaan (tipe under 5MB). Ketuk Musik di atas untuk memasang lagu atau audio TikTok.`;
+            ? `${slotNum} klip terpasang dengan musik. Siap dimainkan.` 
+            : `Preset dimuat (${slotNum} klip). Ketuk Musik di atas untuk memasang lagu atau audio TikTok.`;
 
           showAmStatus('success', `Preset "${projectTitle}" Berhasil Dimuat!`, audioNote);
           if (impState) impState.textContent = `Preset aktif: ${projectTitle}`;
