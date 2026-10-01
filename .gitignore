@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Video outputs & uploads
+outputs/
+uploads/
+*.mp4
+!audio.m4a
+!audio2.m4a
+!audio3.m4a
+
+# Temporary APK & Testing
+*.apk
+scratch/
+.playwright-mcp/
+.claude/
+screenshot_*.png
+test_*.png
+
+# Android build cache (jika folder android ikut dicadangkan)
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/

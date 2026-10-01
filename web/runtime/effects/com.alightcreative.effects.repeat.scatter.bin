@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alight Motion Rendering Engine</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    .box {
+      max-width: 700px;
+      padding: 32px;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 24px;
+    }
+
+    h1 small {
+      display: block;
+      margin-top: 8px;
+      font-size: 14px;
+      color: #888;
+      font-weight: normal;
+    }
+
+    p {
+      color: #bbb;
+      line-height: 1.7;
+    }
+
+    .warning {
+      color: #ffb84d;
+      font-weight: bold;
+    }
+
+    a {
+      color: #25d366;
+      font-weight: bold;
+      text-decoration: none;
+    }
+
+    .channel {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>
+      Alight Motion Rendering Engine
+      <small>(namanya terlalu dikeren-kerenkan 🤭😭)</small>
+    </h1>
+
+    <p class="warning">
+      SEDANG DIISTIRAHATKAN KARENA WEBSITE INI TELAH GAGAL TOTAL DALAM MENANGANI EFEK SHADER, LAYERING, EMBEDING SCENE, DAN OVERDRAW.
+<br><br>
+AKAN DILAKUKAN PERBAIKAN PADA WEB INI.
+    </p>
+
+    <p>
+      Kalau udah kesel nih 😤,
+      Umm marahin aku aja nih hehe >//< di WhatsApp Kukuh ZErvida.
+    </p>
+
+    <p>
+      <a href="https://wa.me/6285174378627">
+        wa.me/6285174378627
+      </a>
+    </p>
+
+    <div class="channel">
+      <p>
+        Cek info terbaru di saluran:
+      </p>
+
+      <p>
+        <a href="https://whatsapp.com/channel/0029Vb43th14Y9lkeL7fno04"
+           target="_blank"
+           rel="noopener noreferrer">
+          Ikuti saluran MAKAN SAJA di WhatsApp
+        </a>
+      </p>
+    </div>
+  </div>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"8941068f3414400c917b5bb7210f454c","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>

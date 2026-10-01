@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#bae6fd">
+  <title>XEDITZ Studio • Professional Preset & Video Player</title>
+  
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&family=VT323&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style-simple.css?v=32">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2308090c' stroke='%23383e4a' stroke-width='2'/%3E%3Cpath d='M9 9 L23 23 M23 9 L9 23' stroke='%23f1f3f7' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <!-- Responsive viewport tokens -->
+  <!-- Deteksi Layar Laptop / Desktop -> Mode Bingkai HP Android -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      function fit() {
+        var framed = window.innerWidth >= 640 && window.innerHeight >= 480;
+        var st = root.style;
+        if (framed) {
+          var h = Math.max(580, Math.min(880, window.innerHeight - 36));
+          var w = Math.max(340, Math.min(420, Math.round(h * 0.48)));
+          st.setProperty('--screen-h', h + 'px');
+          st.setProperty('--screen-w', w + 'px');
+          st.setProperty('--safe-top', '34px');
+          st.setProperty('--safe-bottom', '20px');
+        } else {
+          st.setProperty('--screen-h', '100dvh');
+          st.setProperty('--screen-w', '100vw');
+          st.setProperty('--safe-top', 'env(safe-area-inset-top, 0px)');
+          st.setProperty('--safe-bottom', 'env(safe-area-inset-bottom, 0px)');
+        }
+        root.classList.toggle('frame-mode', framed);
+      }
+      fit();
+      window.addEventListener('resize', fit);
+    })();
+  </script>
+  <!-- SVG Symbols Sprite Definition (Precision Crisp Vector Icons - 100% Zero Emojis) -->
+  <svg width="0" height="0" style="position:absolute; width:0; height:0; overflow:hidden;" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- Media Player & Transport -->
+      <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></symbol>
+      <symbol id="i-restart" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 15a9 9 0 1 0 2-9.5L1 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-loop" viewBox="0 0 24 24"><path d="M17 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 11V9a4 4 0 0 1 4-4h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 23l-4-4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      
+      <!-- Studio Navigation & Tabs -->
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      
+      <!-- Actions & Inputs -->
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2a5 5 0 0 0 7.07 7.07l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+      <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="7" y1="3" x2="7" y2="21" stroke="currentColor" stroke-width="2"/><line x1="17" y1="3" x2="17" y2="21" stroke="currentColor" stroke-width="2"/><line x1="2" y1="8" x2="7" y2="8" stroke="currentColor" stroke-width="2"/><line x1="2" y1="16" x2="7" y2="16" stroke="currentColor" stroke-width="2"/><line x1="17" y1="8" x2="22" y2="8" stroke="currentColor" stroke-width="2"/><line x1="17" y1="16" x2="22" y2="16" stroke="currentColor" stroke-width="2"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="16" r="3" fill="currentColor"/><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="1 20 1 14 7 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14" stroke="currentColor" stroke-width="2"/><line x1="4" y1="10" x2="4" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="12" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="20" y1="21" x2="20" y2="16" stroke="currentColor" stroke-width="2"/><line x1="20" y1="12" x2="20" y2="3" stroke="currentColor" stroke-width="2"/><line x1="1" y1="14" x2="7" y2="14" stroke="currentColor" stroke-width="2"/><line x1="9" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="2"/><line x1="17" y1="16" x2="23" y2="16" stroke="currentColor" stroke-width="2"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chevron-up" viewBox="0 0 24 24"><polyline points="6 15 12 9 18 15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- Perangkat Android: bingkai di layar lebar, layar penuh di HP -->
+  <div class="device-stage" id="deviceStage">
+    <div class="device" id="device">
+      <span class="device-btn device-btn-power" aria-hidden="true"></span>
+      <span class="device-btn device-btn-vol" aria-hidden="true"></span>
+      <div class="device-screen" id="appScreen">
+        <div class="status-bar" aria-hidden="true">
+          <span class="sb-time" id="sbTime">09:41</span>
+          <span class="sb-camera"></span>
+          <span class="sb-icons">
+            <svg class="sb-ic" viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10.5 10.5 0 0 1 14 0M8.5 15.5a5.5 5.5 0 0 1 7 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg>
+            <svg class="sb-ic" viewBox="0 0 24 24"><path d="M3 20h3v-5H3zM8.5 20h3v-9h-3zM14 20h3V7h-3zM19.5 20h2.5V3h-2.5z" fill="currentColor"/></svg>
+            <svg class="sb-ic sb-bat" viewBox="0 0 26 24"><rect x="2" y="6" width="19" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4.5" y="8.5" width="12" height="7" rx="1.2" fill="currentColor"/><rect x="22" y="10" width="2.4" height="4" rx="1" fill="currentColor"/></svg>
+          </span>
+        </div>
+
+        <!-- CapCut Top Bar Header (Foto 2 Referensi) -->
+        <header class="capcut-header">
+          <button type="button" id="reopenWelcome" class="capcut-back-btn" title="Ganti Preset / Kembali" aria-label="Ganti Preset">
+            <svg class="capcut-ic-back" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          
+          <button type="button" id="capcutAudioBtn" class="capcut-audio-pill" title="Atur Musik / Audio">
+            <svg class="i-audio-capcut" viewBox="0 0 24 24"><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="16" r="3" fill="currentColor"/><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="capcutAudioLabel">Asli</span>
+          </button>
+
+          <button type="button" id="headerExportBtn" class="capcut-export-btn" title="Ekspor Video MP4">
+            <svg class="i-exp-capcut" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="9.5 8.5 15.5 12 9.5 15.5" fill="currentColor"/></svg>
+            <span>Ekspor</span>
+          </button>
+
+          <!-- Hidden stubs for engine compatibility -->
+          <span id="subtitle" style="display:none;" aria-hidden="true">Memuat engine...</span>
+          <span class="status-pill" style="display:none;" aria-hidden="true"><span class="pulse-dot"></span><span>60 FPS</span></span>
+        </header>
+
+        <!-- Main Responsive Workspace -->
+  <main class="studio-layout">
+    
+    <!-- LEFT / TOP: 9:16 Video Player Stage -->
+    <section class="player-column">
+      <div class="stage-container" id="stage">
+        <canvas id="view" width="360" height="640"></canvas>
+        
+        <!-- Big Play Hint Button Overlay -->
+        <div class="stage-hint">
+          <span id="bigPlayBtn" class="big-play-trigger" title="Putar Video">
+            <svg class="i-play-svg" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>
+          </span>
+        </div>
+
+        <div id="dropHint">Lepas file XML / Media di sini</div>
+        
+        <!-- Busy Loading Overlay -->
+        <div id="stageBusy" hidden>
+          <div class="busy-spinner"></div>
+          <div class="busy-label" id="busyLabel">Menyiapkan preset...</div>
+          <div class="busy-detail" id="busyDetail"></div>
+          <button id="busyDismiss" class="btn-dismiss" type="button" hidden>Tutup</button>
+        </div>
+      </div>
+
+      <!-- Compact Player Transport Controls (Y2K Chrome Style) -->
+      <div class="player-controls" id="transport">
+        <!-- Single-line Time Scrubber -->
+        <div class="scrubber-bar">
+          <input type="range" id="seek" min="0" max="10000" value="0" step="1" aria-label="Posisi Timeline">
+          <button id="seekReset" class="btn-icon-subtle" type="button" title="Kembali ke awal" style="display:none;"></button>
+        </div>
+
+        <div class="controls-row">
+          <div class="controls-left">
+            <button id="play" class="btn-action chrome-primary" type="button">
+              <svg class="i-btn"><use xlink:href="#i-play"></use></svg>
+              <span>Putar</span>
+            </button>
+            <button id="restart" class="btn-action chrome-ghost" type="button" title="Ulangi dari awal">
+              <svg class="i-btn"><use xlink:href="#i-restart"></use></svg>
+            </button>
+            <button id="loopBtn" class="btn-action chrome-ghost on" type="button" title="Putar Berulang">
+              <svg class="i-btn"><use xlink:href="#i-loop"></use></svg>
+              <span id="loopLabel">Loop</span>
+            </button>
+          </div>
+          
+          <div class="controls-right">
+            <button id="stageToggle" class="btn-action chrome-ghost btn-toggle-stage" type="button" title="Kecilkan preview" aria-label="Kecilkan preview" aria-pressed="false">
+              <svg class="i-btn"><use xlink:href="#i-chevron-up"></use></svg>
+            </button>
+            <span class="time-readout" id="timeLabel">0.00s / 0.00s</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT / BOTTOM: 4 Clean Tabs Studio Hub -->
+    <section class="control-column">
+      <!-- Hub Tabs lama disembunyikan (digantikan oleh CapCut Bottom Nav) -->
+      <nav class="hub-tabs" role="tablist" style="display:none;" aria-hidden="true">
+        <button type="button" class="tab-btn active" data-tab="media" role="tab">Foto &amp; Media</button>
+        <button type="button" class="tab-btn" data-tab="audio" role="tab">Musik &amp; Audio</button>
+      </nav>
+
+      <div class="tab-content-wrapper" id="panes">
+
+        <!-- Stub tersembunyi untuk kompatibilitas input link/XML engine -->
+        <section id="pane-proyek" class="pane" style="display:none;" aria-hidden="true">
+
+          <!-- OPTION A: IMPOR DARI LINK PRESET (PRIMARY) -->
+          <div class="hub-card y2k-card">
+            <div class="card-header">
+              <div class="card-badge-row">
+                <h2>Impor Link Preset</h2>
+                <span class="badge-tag">Otomatis</span>
+              </div>
+              <p>Tempel link Alight Motion atau Google Drive XML. Media &amp; musik langsung terpasang.</p>
+            </div>
+
+            <div class="link-input-container">
+              <div class="link-input-wrapper">
+                <span class="link-input-icon">
+                  <svg class="i-icon"><use xlink:href="#i-link"></use></svg>
+                </span>
+                <input type="url" id="customUrlAmInput" class="custom-url-input" placeholder="Tempel link Alight Motion atau Google Drive XML..." spellcheck="false" autocomplete="off">
+                <button type="button" id="btnPasteAm" class="btn-paste" title="Tempel dari Clipboard">
+                  <svg class="i-btn"><use xlink:href="#i-copy"></use></svg>
+                  <span>Tempel</span>
+                </button>
+              </div>
+              
+              <button type="button" id="btnFetchAm" class="btn-action chrome-primary block-btn am-go-btn">
+                <svg class="i-btn"><use xlink:href="#i-zap"></use></svg>
+                <span>Ambil &amp; Pasang Preset</span>
+              </button>
+
+            </div>
+
+            <!-- Status / Progress Box -->
+            <div id="customUrlAmStatus" class="link-status-box" style="display: none;">
+              <div class="status-indicator"></div>
+              <div class="status-text-content">
+                <div class="status-main" id="statusAmTitle">Memproses link...</div>
+                <div class="status-sub" id="statusAmDesc"></div>
+              </div>
+            </div>
+
+            <!-- Multi-project dropdown if package has more than 1 project -->
+            <div id="customUrlAmPickRow" class="field-row-wrap" style="display: none; margin-top: 10px;">
+              <label class="field-label-sub" for="customUrlAmPick">Pilih Proyek dari Paket:</label>
+              <select id="customUrlAmPick" class="select-dropdown"></select>
+            </div>
+          </div>
+
+          <!-- OPTION B: UPLOAD FILE XML -->
+          <div class="hub-card y2k-card">
+            <div class="card-header">
+              <div class="card-badge-row">
+                <h2>Upload File XML</h2>
+                <span class="badge-tag">File .XML</span>
+              </div>
+              <p>Pilih file preset <code>.xml</code> dari penyimpanan perangkat Anda.</p>
+            </div>
+
+            <!-- Drag & Drop Zone -->
+            <label class="upload-dropzone" for="impXml">
+              <input type="file" id="impXml" accept=".xml,text/xml,application/xml" multiple hidden>
+              <div class="drop-icon-box">
+                <svg class="drop-svg"><use xlink:href="#i-upload"></use></svg>
+              </div>
+              <div class="drop-main-text">Pilih atau Tarik File .XML</div>
+              <div class="drop-sub-text">Mendukung 1 file preset utama atau 2 file (Preset + CC).</div>
+            </label>
+
+            <!-- State feedback and controls -->
+            <div class="preset-status-row">
+              <div class="state-status-pill" id="impState">Preset aktif: Siap digunakan</div>
+              <button id="impReset" class="btn-action chrome-ghost sm" type="button" title="Kembalikan preset awal">
+                <svg class="i-btn"><use xlink:href="#i-refresh"></use></svg>
+                <span>Reset</span>
+              </button>
+            </div>
+            
+            <div id="impPickRow" style="display: none; margin-top: 8px;">
+              <select id="impPick" class="select-dropdown"></select>
+            </div>
+          </div>
+
+          <!-- Hidden Stub for catalog compatibility if needed by engine scripts -->
+          <div id="custom-presets-grid" style="display:none;" aria-hidden="true"></div>
+        </section>
+
+
+        <!-- ======== TAB 1 UTAMA: GANTI FOTO & KLIP ALA CAPCUT ======== -->
+        <section id="pane-media" class="pane active">
+          <!-- Klip Media Horizontal ala CapCut (Foto 2) -->
+          <div class="capcut-clips-section">
+            <div class="capcut-clips-header">
+              <span class="capcut-clips-title">Klip Template</span>
+              <span class="capcut-clips-count" id="slotCount">0 slot</span>
+            </div>
+
+            <!-- Deretan Slot Media Horizontal (Foto 2: 1, 2, 3, ...) -->
+            <div class="slots-horizontal-bar" id="mediaRows">
+              <div class="empty-hint">Memuat slot klip dari preset...</div>
+            </div>
+            <div class="state-status-pill" id="slotSwapState" style="display:none; margin-top:8px;"></div>
+          </div>
+
+          <!-- Kartu Rasio Preset -->
+          <div class="hub-card y2k-card" id="ratioPresetCard" style="margin-top: 14px;">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-badge-row">
+                  <h2>Rasio Preset Video</h2>
+                  <span class="slot-badge" id="currentRatioBadge">Asli</span>
+                </div>
+                <p>Ubah bentuk kanvas preset (1:1 &harr; 9:16, 16:9, 4:5, 3:4).</p>
+              </div>
+            </div>
+
+            <div class="ratio-card-content">
+              <div class="field-label-sub" style="margin-bottom: 6px;">Pilih Rasio Kanvas:</div>
+              <div class="ratio-chips-grid" id="presetRatioChips">
+                <button type="button" class="chip active" data-ratio="original">Asli (Bawaan)</button>
+                <button type="button" class="chip" data-ratio="1:1">1:1 (Persegi)</button>
+                <button type="button" class="chip" data-ratio="9:16">9:16 (Story/Reels)</button>
+                <button type="button" class="chip" data-ratio="16:9">16:9 (Lanskap)</button>
+                <button type="button" class="chip" data-ratio="4:5">4:5 (Feed IG)</button>
+                <button type="button" class="chip" data-ratio="3:4">3:4 (Portrait)</button>
+              </div>
+
+              <div class="ratio-mode-row" style="margin-top: 12px;">
+                <span class="field-label-sub" style="margin-bottom:0;">Penyesuaian Frame:</span>
+                <div class="radio-toggle-group">
+                  <label class="radio-chip">
+                    <input type="radio" name="ratioFitMode" value="fit" checked>
+                    <span>Pas (Fit)</span>
+                  </label>
+                  <label class="radio-chip">
+                    <input type="radio" name="ratioFitMode" value="fill">
+                    <span>Penuh (Fill)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="ratio-actions" style="margin-top: 14px;">
+                <button type="button" id="btnRatioApply" class="btn-action chrome-primary" disabled>
+                  <svg class="i-btn"><use xlink:href="#i-check"></use></svg>
+                  <span>Terapkan Rasio</span>
+                </button>
+                <button type="button" id="btnRatioRevert" class="btn-action chrome-ghost" disabled>
+                  <svg class="i-btn"><use xlink:href="#i-refresh"></use></svg>
+                  <span>Kembalikan Rasio Asli</span>
+                </button>
+              </div>
+
+              <div class="state-status-pill" id="ratioState" style="display:none; margin-top:10px;"></div>
+            </div>
+          </div>
+
+          <!-- Teks preset: ubah isi / hapus -->
+          <div class="hub-card y2k-card" id="textCard">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-badge-row">
+                  <h2>Teks Preset</h2>
+                  <span class="slot-badge" id="textCount">0 teks</span>
+                </div>
+                <p>Ubah isi teks atau kosongkan untuk menghapus kredit.</p>
+              </div>
+            </div>
+
+            <div class="text-rows" id="textRows">
+              <div class="empty-hint">Memuat teks dari preset...</div>
+            </div>
+
+            <div class="text-actions">
+              <button type="button" id="textApply" class="btn-action chrome-primary" disabled>
+                <svg class="i-btn"><use xlink:href="#i-check"></use></svg>
+                <span>Terapkan</span>
+              </button>
+              <button type="button" id="textRevert" class="btn-action chrome-ghost" disabled>
+                <svg class="i-btn"><use xlink:href="#i-refresh"></use></svg>
+                <span>Batalkan</span>
+              </button>
+            </div>
+            <div class="state-status-pill" id="textState" style="display:none; margin-top:10px;"></div>
+          </div>
+
+          <!-- Framing -->
+          <div class="hub-card y2k-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h2>Atur Posisi &amp; Skala (Framing)</h2>
+                <p>Sesuaikan perbesaran foto agar proporsi pas di layar.</p>
+              </div>
+            </div>
+
+            <div class="control-field">
+              <div class="field-label-row">
+                <span>Skala Pembesaran Foto</span>
+                <span class="field-val" id="scaleLabel">1.00x</span>
+              </div>
+              <input type="range" id="scale" min="0.5" max="2.5" step="0.05" value="1">
+            </div>
+
+            <div class="control-field" style="margin-top: 12px;">
+              <div class="field-label-row">
+                <span>Ukuran Kotak Layer</span>
+              </div>
+              <select id="sizeScale" class="select-dropdown">
+                <option value="auto" selected>Auto x2 (Bawaan Alight Motion)</option>
+                <option value="1">1x (Bentang Layar Penuh)</option>
+                <option value="2">2x (Setengah Bentang Layar)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stub tersembunyi: dibutuhkan engine (galeri internal tidak ditampilkan, audio memakai #impPhoto) -->
+          <div style="display:none;" aria-hidden="true">
+            <span id="galleryCount"></span>
+            <div id="photoGallery"></div>
+            <input type="file" id="impPhoto" accept="image/*,video/*,audio/*" multiple>
+          </div>
+        </section>
+
+
+        <!-- ======== TAB 3: MUSIK / AUDIO HUB ======== -->
+        <section id="pane-audio" class="pane">
+          <!-- Audio Selection Hub -->
+          <div class="hub-card y2k-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h2>Pusat Musik Video</h2>
+                <p>Ganti musik latar dari video galeri, link TikTok, atau file audio.</p>
+              </div>
+            </div>
+
+            <!-- Option 1: Ekstrak dari Video MP4 -->
+            <div class="audio-option-box">
+              <div class="opt-header">
+                <span class="opt-icon-box">
+                  <svg class="opt-svg"><use xlink:href="#i-film"></use></svg>
+                </span>
+                <div>
+                  <div class="opt-title">Ekstrak dari Video Galeri</div>
+                  <div class="opt-sub">Pilih video, suaranya otomatis diambil sebagai audio template.</div>
+                </div>
+              </div>
+              <label class="btn-action chrome-ghost block-btn" for="videoAudioInput">
+                <svg class="i-btn"><use xlink:href="#i-film"></use></svg>
+                <span>Pilih Video Galeri</span>
+                <input type="file" id="videoAudioInput" accept="video/*" hidden>
+              </label>
+              <div class="state-status-pill" id="videoAudioState" style="display:none; margin-top:8px;"></div>
+            </div>
+
+            <!-- Option 2: Ambil Lagu dari Link TikTok -->
+            <div class="audio-option-box">
+              <div class="opt-header">
+                <span class="opt-icon-box">
+                  <svg class="opt-svg"><use xlink:href="#i-link"></use></svg>
+                </span>
+                <div>
+                  <div class="opt-title">Audio dari Link TikTok</div>
+                  <div class="opt-sub">Tempel tautan video TikTok untuk mengambil lagunya.</div>
+                </div>
+              </div>
+              <div class="input-action-row">
+                <input type="url" id="urlTiktok" placeholder="https://vt.tiktok.com/..." class="input-text" spellcheck="false">
+                <button type="button" id="urlTiktokGo" class="btn-action chrome-primary">Ambil</button>
+              </div>
+              <div class="state-status-pill" id="urlTiktokState" style="margin-top:8px;">Belum ada audio dari TikTok</div>
+            </div>
+
+            <!-- Option 3: Upload File Audio Langsung -->
+            <div class="audio-option-box">
+              <div class="opt-header">
+                <span class="opt-icon-box">
+                  <svg class="opt-svg"><use xlink:href="#i-music"></use></svg>
+                </span>
+                <div>
+                  <div class="opt-title">Upload Musik Sendiri</div>
+                  <div class="opt-sub">Mendukung format file MP3, M4A, atau WAV.</div>
+                </div>
+              </div>
+              <label class="btn-action chrome-ghost block-btn" for="directAudioInput">
+                <svg class="i-btn"><use xlink:href="#i-music"></use></svg>
+                <span>Pilih File Audio (MP3 / M4A)</span>
+                <input type="file" id="directAudioInput" accept="audio/*" hidden>
+              </label>
+            </div>
+          </div>
+
+          <!-- Audio Sync & Adjustment -->
+          <div class="hub-card y2k-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h2>Sinkronisasi Ketukan</h2>
+                <p>Sesuaikan jika tempo lagu terlambat atau mendahului transisi efek visual.</p>
+              </div>
+            </div>
+
+            <div class="control-field">
+              <div class="field-label-row">
+                <span>Geser Waktu Ketukan (Offset)</span>
+                <span class="field-val" id="offsetLabel">0 ms</span>
+              </div>
+              <input type="range" id="offset" min="-3000" max="3000" step="10" value="0">
+            </div>
+
+            <div class="control-field" style="margin-top: 12px;">
+              <div class="field-label-row">
+                <span>Kecepatan Musik</span>
+                <span class="field-val" id="rateLabel">1.000x</span>
+              </div>
+              <input type="range" id="rate" min="0.5" max="1.5" step="0.01" value="1">
+            </div>
+
+            <div class="checkbox-row" style="margin-top: 12px;">
+              <label class="check-item">
+                <input type="checkbox" id="pitchKeep" checked>
+                <span>Pertahankan nada lagu (Anti cempreng saat tempo berubah)</span>
+              </label>
+            </div>
+
+            <!-- Hidden stubs for compatibility -->
+            <div id="audioRows" style="display:none;"></div>
+            <div id="audioState" style="display:none;"></div>
+            <div id="syncState" style="display:none;"></div>
+            <button id="rateAuto" style="display:none;"></button>
+            <input type="checkbox" id="videoAudioMute" style="display:none;">
+          </div>
+        </section>
+
+
+        <!-- ======== MODAL DIALOG EKSPOR VIDEO MP4 ======== -->
+        <dialog id="exportModal" class="export-dialog" role="dialog" aria-modal="true" aria-labelledby="expModalTitle">
+          <div class="dlg-head">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <svg class="i" style="color:var(--accent-primary);"><use xlink:href="#i-download"></use></svg>
+              <h2 id="expModalTitle" style="font-size:1.1rem; font-weight:700; color:#fff;">Ekspor Video MP4</h2>
+            </div>
+            <button type="button" id="closeExportModal" class="btn-action chrome-ghost sm" aria-label="Tutup Dialog">
+              <svg class="i-btn sm" viewBox="0 0 24 24" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+
+          <div id="pane-ekspor" class="hub-card" style="border:none; padding:0; background:transparent; box-shadow:none;">
+            <div class="card-header" style="margin-bottom:14px;">
+              <p style="font-size:0.82rem; color:var(--text-muted);">Simpan hasil video berkualitas tinggi dengan akselerasi perangkat keras WebCodecs 60 FPS.</p>
+            </div>
+
+            <!-- Resolution & FPS Selection -->
+            <div class="grid-2-col">
+              <div class="control-field">
+                <label for="expRes" style="font-size:0.8rem; font-weight:600; color:var(--text-secondary);">Resolusi Video</label>
+                <select id="expRes" class="select-dropdown">
+                  <option value="720" selected>720p HD (Rekomendasi Cepat)</option>
+                  <option value="1080">1080p Full HD (Kualitas Maksimal)</option>
+                  <option value="480">480p (Hemat Ukuran)</option>
+                  <option value="1440">1440p (2K Ultra HD)</option>
+                  <option value="same">Sama dengan Resolusi Preview</option>
+                </select>
+              </div>
+
+              <div class="control-field">
+                <label for="expFps" style="font-size:0.8rem; font-weight:600; color:var(--text-secondary);">Frame Rate (FPS)</label>
+                <select id="expFps" class="select-dropdown">
+                  <option value="60" selected>60 FPS (Super Mulus)</option>
+                  <option value="30">30 FPS (Standar)</option>
+                  <option value="24">24 FPS (Sinematik)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:none;" aria-hidden="true">
+              <select id="expAudioSr"><option value="auto" selected></option></select>
+              <input type="range" id="expBitrate" value="0.08">
+              <input type="number" id="expFpsCustom" value="45">
+              <div id="expFpsCustomRow"></div>
+              <div id="expBitrateLabel"></div>
+              <div id="expResHint"></div>
+            </div>
+
+            <!-- Big Generate Button -->
+            <button type="button" id="expStart" class="btn-action chrome-primary big-export-btn" style="margin-top:14px;">
+              <svg class="i-btn lg"><use xlink:href="#i-download"></use></svg>
+              <span>GENERATE VIDEO MP4 SEKARANG</span>
+            </button>
+            
+            <button type="button" id="expCancel" class="btn-action chrome-ghost sm" style="display:none; margin-top:8px;">Batal Render</button>
+
+            <!-- Progress Indicator -->
+            <div class="export-progress-wrap" id="exportProgressBox" style="display:none;">
+              <div class="progress-info-row">
+                <span id="expStats">Memproses frame video...</span>
+                <span class="pct-num" id="expPctNum">0%</span>
+              </div>
+              <progress id="expBar" value="0" max="1"></progress>
+            </div>
+
+            <!-- Download Result Box -->
+            <div id="expResult" class="export-result-box"></div>
+          </div>
+        </dialog>
+
+      </div>
+    </section>
+
+  </main>
+
+        <!-- ======== TAMPILAN UTAMA 1: HOME SCREEN (AUTHENTIC Y2K RETRO PLAYER) ======== -->
+        <section class="home-screen y2k-retro-theme" id="homeScreen" role="region" aria-label="Halaman Utama Studio">
+          <div class="home-screen-inner">
+            
+            <!-- Retro Window Header (Frutiger Aero / Aqua Window Header) -->
+            <div class="y2k-window-header">
+              <div class="y2k-header-left">
+                <span class="y2k-star-icon">★</span>
+                <span class="y2k-window-title">XEDITZ PLAYER // 2000</span>
+              </div>
+              <div class="y2k-window-controls">
+                <span class="y2k-orb orb-min" title="Minimize"></span>
+                <span class="y2k-orb orb-max" title="Maximize"></span>
+                <span class="y2k-orb orb-close" title="Close">✕</span>
+              </div>
+            </div>
+
+            <!-- Retro Menu Bar (Netscape / Web 2000s) -->
+            <div class="y2k-menu-bar">
+              <div class="menu-items-group">
+                <span class="menu-item active">Home</span>
+                <span class="menu-item">Presets</span>
+                <span class="menu-item">Help</span>
+              </div>
+              <span class="y2k-pill-badge"><span class="pulse-dot-cyan"></span>ONLINE</span>
+            </div>
+
+            <!-- Hero Banner: Authentic Y2K Retro Window Panel -->
+            <div class="home-hero-card y2k-hero-window">
+              <div class="hero-tag-row">
+                <span class="hero-cyber-tag">ALIGHT MOTION CORE</span>
+                <span class="hero-chip-pill">60 FPS</span>
+              </div>
+              
+              <!-- Retro Chrome Bubble 3D Brand -->
+              <div class="y2k-chrome-title-wrap">
+                <h1 class="hero-heading y2k-chrome-text">Preset Video Editor</h1>
+              </div>
+
+              <p class="hero-description">
+                Edit preset jedag-jedug Alight Motion langsung di web. Ganti media foto dan video, atur audio, dan ekspor 60 FPS tanpa watermark.
+              </p>
+              
+              <!-- Clean Minimalist Spec Pills (Tanpa Emoji) -->
+              <div class="home-specs-row">
+                <span class="home-spec-item">WebGL 60 FPS</span>
+                <span class="home-spec-item">1-Tap Clip Swap</span>
+                <span class="home-spec-item">Beat Sync</span>
+              </div>
+            </div>
+
+            <!-- Main CTA Button (High-Contrast Glossy Jelly Capsule Button) -->
+            <div class="home-action-wrap">
+              <button type="button" id="btnEnterStudio" class="btn-y2k-primary btn-jelly-contrast block-btn">
+                <span>Mulai Buat Video</span>
+                <svg class="i-btn"><use xlink:href="#i-zap"></use></svg>
+              </button>
+            </div>
+
+            <!-- Footer Badge -->
+            <div class="home-footer-note y2k-status-bar-bottom">
+              <span>READY // SYSTEM OK • WEB 2000S ENGINE</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Layar sambutan: pilih sumber preset, lalu langsung lanjut ke edit -->
+        <section class="welcome y2k-retro-theme" id="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" hidden>
+          
+          <!-- Retro Window Header -->
+          <div class="y2k-window-header welcome-window-header">
+            <div class="y2k-header-left">
+              <button type="button" id="btnBackToHome" class="btn-back-home" title="Kembali ke Beranda">
+                <svg class="i-btn sm" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Beranda</span>
+              </button>
+            </div>
+            <span class="y2k-window-title">IMPOR PRESET // STEP 1</span>
+            <div class="y2k-window-controls">
+              <span class="y2k-orb orb-min"></span>
+              <span class="y2k-orb orb-max"></span>
+              <span class="y2k-orb orb-close">✕</span>
+            </div>
+          </div>
+
+          <div class="welcome-head">
+            <div class="logo-box welcome-logo y2k-logo"><span class="logo-x">X</span></div>
+            <h2 id="welcomeTitle" class="y2k-chrome-text-sm">Pilih Sumber Preset</h2>
+            <p class="y2k-subtext">Masukkan link Alight Motion atau upload file XML untuk mulai mengedit.</p>
+          </div>
+
+          <div class="welcome-card y2k-panel-card">
+            <div class="welcome-opt-title">
+              <svg class="i"><use xlink:href="#i-link"></use></svg>
+              <span>Link Alight Motion</span>
+            </div>
+            <div class="welcome-input-row y2k-address-bar">
+              <input type="url" id="welcomeLink" placeholder="https://alightcreative.com/am/share/..." spellcheck="false" autocomplete="off">
+              <button type="button" id="welcomePaste" class="btn-paste y2k-btn-bevel" title="Tempel dari clipboard">
+                <svg class="i-btn"><use xlink:href="#i-copy"></use></svg>
+                <span>Tempel</span>
+              </button>
+            </div>
+            <button type="button" id="welcomeGo" class="btn-action chrome-primary btn-jelly-contrast block-btn">
+              <svg class="i-btn"><use xlink:href="#i-zap"></use></svg>
+              <span>Ambil preset</span>
+            </button>
+          </div>
+
+          <div class="welcome-or"><span class="y2k-or-badge">atau</span></div>
+
+          <div class="welcome-card y2k-panel-card">
+            <div class="welcome-opt-title">
+              <svg class="i"><use xlink:href="#i-upload"></use></svg>
+              <span>Upload file preset XML</span>
+            </div>
+            <label class="btn-action chrome-ghost block-btn y2k-btn-ghost" for="welcomeXml" id="welcomeXmlLabel">
+              <svg class="i-btn"><use xlink:href="#i-folder"></use></svg>
+              <span>Pilih file .xml</span>
+              <input type="file" id="welcomeXml" accept=".xml,text/xml,application/xml" multiple hidden>
+            </label>
+          </div>
+
+          <div class="welcome-status" id="welcomeStatus" hidden>
+            <div class="busy-spinner sm" id="welcomeSpinner"></div>
+            <div class="ws-text">
+              <div class="ws-title" id="welcomeStatusTitle"></div>
+              <div class="ws-desc" id="welcomeStatusDesc"></div>
+            </div>
+          </div>
+        </section>
+
+                <!-- Modal Framing & Bentuk Foto Per Slot (Di dalam .device-screen) -->
+        <div class="slot-framing-modal" id="framingModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="framingTitle">
+          <div class="framing-modal-header">
+            <div class="framing-title-group">
+              <h3 id="framingTitle">Atur Bentuk &amp; Framing Foto</h3>
+              <span class="framing-slot-name" id="framingSlotName">Slot 1</span>
+            </div>
+            <button type="button" class="btn-action chrome-ghost sm" id="btnFramingClose" title="Tutup">
+              <svg class="i-btn sm"><use xlink:href="#i-x"></use></svg>
+            </button>
+          </div>
+          
+          <div class="framing-modal-body">
+            <!-- Area Pratinjau Framing Interaktif (Canvas) -->
+            <div class="framing-canvas-wrapper" id="framingCanvasWrap">
+              <canvas id="framingCanvas"></canvas>
+              <div class="framing-grid-overlay" aria-hidden="true">
+                <div class="v1"></div>
+                <div class="v2"></div>
+                <div class="h1"></div>
+                <div class="h2"></div>
+              </div>
+              <div class="framing-drag-hint">Geser foto untuk memposisikan</div>
+            </div>
+
+            <!-- Pilihan Mode / Bentuk Pemotongan -->
+            <div class="framing-options-section">
+              <div class="field-label-sub" style="margin-bottom: 6px;">Bentuk Pemotongan Foto:</div>
+              <div class="ratio-chips-grid" id="framingModeChips">
+                <button type="button" class="chip active" data-mode="auto">Otomatis (Preset)</button>
+                <button type="button" class="chip" data-mode="fill">Isi Penuh</button>
+                <button type="button" class="chip" data-mode="fit">Utuh (Fit Blur)</button>
+                <button type="button" class="chip" data-mode="1:1">1:1</button>
+                <button type="button" class="chip" data-mode="9:16">9:16</button>
+                <button type="button" class="chip" data-mode="16:9">16:9</button>
+                <button type="button" class="chip" data-mode="4:5">4:5</button>
+                <button type="button" class="chip" data-mode="3:4">3:4</button>
+              </div>
+            </div>
+
+            <!-- Slider Zoom & Reset Posisi -->
+            <div class="framing-zoom-row">
+              <span class="zoom-label">Perbesaran:</span>
+              <input type="range" id="framingZoom" min="0.5" max="3" step="0.05" value="1">
+              <span class="zoom-val" id="framingZoomVal">1.00x</span>
+              <button type="button" class="btn-action chrome-ghost sm" id="framingResetPos" title="Kembalikan Posisi &amp; Skala">Reset</button>
+            </div>
+          </div>
+
+          <div class="framing-modal-footer">
+            <button type="button" class="btn-action chrome-ghost" id="btnFramingCancel">Batal</button>
+            <button type="button" class="btn-action chrome-primary" id="btnFramingApply">
+              <svg class="i-btn"><use xlink:href="#i-check"></use></svg>
+              <span>Pasang ke Slot</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- CapCut Bottom Navigation Bar (Foto 2) -->
+        <nav class="capcut-bottom-nav" role="tablist">
+          <button type="button" class="capcut-nav-item active tab-btn" data-tab="media" role="tab">
+            <svg class="capcut-nav-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="7" y1="2" x2="7" y2="22" stroke="currentColor" stroke-width="2"/><line x1="17" y1="2" x2="17" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg>
+            <span>Klip</span>
+            <div class="capcut-nav-indicator"></div>
+          </button>
+          <button type="button" class="capcut-nav-item tab-btn" data-tab="audio" role="tab">
+            <svg class="capcut-nav-icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="18" cy="16" r="3" fill="currentColor"/></svg>
+            <span>Audio</span>
+            <div class="capcut-nav-indicator"></div>
+          </button>
+        </nav>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        <div class="gesture-bar" aria-hidden="true"><span></span></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Hidden Compatibility Stubs for Engine Binding (Anti-Break) -->
+  <div class="engine-hidden-stubs" style="display: none !important; visibility: hidden !important;" aria-hidden="true">
+    <button id="hdrOpen"></button>
+    <button id="openSettings"></button>
+    <button id="stageBtnSize"></button>
+    <div id="debugOverlay"></div>
+    <div id="timelineDock"></div>
+    <div id="pane-layer">
+      <div id="layers-count"></div>
+      <button id="tl-groups"></button>
+      <button id="tl-bm"></button>
+      <button id="tl-bm-prev"></button>
+      <button id="tl-bm-next"></button>
+      <button id="tl-here"></button>
+      <button id="tl-zoom-out"></button>
+      <input type="range" id="tl-zoom" value="3">
+      <button id="tl-zoom-in"></button>
+      <span id="tl-zoom-label"></span>
+      <button id="tl-fit"></button>
+      <div id="scene-tree-panel"><div id="scene-tree-breadcrumb"></div><button id="scene-tree-up"></button><div id="scene-tree-list"></div></div>
+      <div id="timeline-wrap"><div id="timeline-body"><div id="timeline-inner"><div id="timeline-ruler"><canvas id="timeline-ruler-canvas"></canvas><div id="tl-cap"></div></div><div id="timeline-tracks"></div><div id="tl-playhead"></div></div></div></div>
+      <div id="layer-info"></div>
+    </div>
+    <input type="url" id="urlAm">
+    <button id="urlAmGo"></button>
+    <div id="urlAmState"></div>
+    <select id="urlAmPick"></select>
+    <div id="urlAmPickRow"></div>
+    <input type="url" id="urlDrive">
+    <button id="urlDriveGo"></button>
+    <div id="urlDriveState"></div>
+    <input type="url" id="urlDriveAudio">
+    <button id="urlDriveAudioGo"></button>
+    <div id="urlDriveAudioState"></div>
+    <dialog id="settingsDlg">
+      <select id="quality"><option value="360" selected></option></select>
+      <div id="resLabel"></div>
+      <select id="fpsTarget"><option value="60" selected></option></select>
+      <input type="number" id="fpsCustom">
+      <div id="fpsCustomRow"></div>
+      <input type="checkbox" id="autoQuality" checked>
+      <input type="checkbox" id="fxToggle" checked>
+      <input type="checkbox" id="debugModeToggle">
+      <table id="shortcutRows"></table>
+      <div id="status"></div>
+      <div id="perfLabel"></div>
+      <div id="log"></div>
+    </dialog>
+  </div>
+
+  <!-- Top-level Modal Dialogs -->
+  <dialog id="lightbox" aria-labelledby="lightboxTitle">
+    <div class="dlg-head">
+      <h2 id="lightboxTitle">Preview Foto</h2>
+      <button class="btn-action chrome-ghost sm btn-dlg-close" type="button" data-close aria-label="Tutup">
+        <svg class="i-btn sm"><use xlink:href="#i-x"></use></svg>
+      </button>
+    </div>
+    <div class="dlg-body" id="lightboxBody"></div>
+  </dialog>
+
+  <dialog id="mediaPickerDlg" aria-labelledby="mediaPickerTitle">
+    <div class="dlg-head">
+      <h2 id="mediaPickerTitle">Ganti Media</h2>
+      <button class="btn-action chrome-ghost sm btn-dlg-close" type="button" data-close aria-label="Tutup">
+        <svg class="i-btn sm"><use xlink:href="#i-x"></use></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <p class="dlg-subtext">Ketuk salah satu foto atau video di bawah untuk memasangnya ke slot ini.</p>
+      <div id="mediaPickerGrid" class="gallery"></div>
+    </div>
+  </dialog>
+
+  <dialog id="layerXmlDlg" aria-labelledby="layerXmlTitle">
+    <div class="dlg-head">
+      <h2 id="layerXmlTitle">XML Layer</h2>
+      <button class="btn-action chrome-ghost sm btn-dlg-close" type="button" data-close aria-label="Tutup">
+        <svg class="i-btn sm"><use xlink:href="#i-x"></use></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <pre id="layerXmlBody" style="white-space:pre-wrap; word-break:break-word; max-height:60vh; overflow:auto; font-size:11px; margin:0;"></pre>
+    </div>
+  </dialog>
+
+  <!-- Load WebGL Engine & Custom Simple Studio Controller -->
+  <script type="module" src="./runtime/assets/preset-VCGEVJ32.js"></script>
+  <script src="./app-simple.js?v=33"></script>
+</body>
+</html>
