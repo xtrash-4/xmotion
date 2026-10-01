@@ -439,6 +439,128 @@ def _prefetch_media_background(package_id: str, media_list: list):
                 try: os.remove(tmp_path)
                 except OSError: pass
 
+def _download_am_direct_package(url: str, project: str = None) -> dict:
+    """
+    Mengunduh dan mengekstrak paket Alight Motion (.zip berisi XML + foto/video/audio)
+    langsung dari Firebase Storage resmi Alight Creative tanpa perantara pihak ketiga.
+    """
+    clean_url = url.strip()
+    
+    # 1. Resolve redirect jika menggunakan shortlink alight.link
+    if "alight.link" in clean_url or "alightcreative.com/am/share" not in clean_url:
+        try:
+            req_red = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req_red, timeout=10) as r_red:
+                clean_url = r_red.geturl()
+        except Exception as e_red:
+            print("[direct-am] Gagal resolve redirect:", e_red)
+
+    # 2. Parse user_id dan package_id
+    m = re.search(r"/am/share/u/([A-Za-z0-9_-]+)/p/([A-Za-z0-9_-]+)", clean_url)
+    if not m:
+        raise ValueError("Format link Alight Motion tidak valid. Format: https://alightcreative.com/am/share/u/{USER}/p/{PACKAGE}")
+
+    user_id = m.group(1)
+    package_id = m.group(2)
+
+    # 3. Coba unduh projectfiles.zip dari Firebase Storage
+    zip_bytes = None
+    filenames_to_try = ("projectfiles.zip", "projectFiles.zip", "package.zip", "project.zip")
+    last_err = None
+
+    for fname in filenames_to_try:
+        object_path = f"share/u/{user_id}/p/{package_id}/{fname}"
+        encoded_path = urllib.parse.quote(object_path, safe="")
+        storage_url = f"https://firebasestorage.googleapis.com/v0/b/alight-creative.appspot.com/o/{encoded_path}?alt=media"
+        try:
+            req = urllib.request.Request(
+                storage_url,
+                headers={
+                    "User-Agent": "AlightMotion/6.2.53 (iOS; gzip)",
+                    "Accept": "*/*",
+                    "Accept-Encoding": "identity",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+                if data and len(data) > 0:
+                    zip_bytes = data
+                    print(f"[direct-am] Berhasil unduh {fname} ({len(zip_bytes)} bytes) untuk package {package_id}")
+                    break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if not zip_bytes:
+        raise ValueError(f"Tidak dapat mengunduh paket Alight Motion dari cloud ({last_err}). Link mungkin telah kedaluwarsa atau dihapus.")
+
+    # 4. Ekstrak ZIP ke runtime/media/{package_id}/ dan runtime/presets/
+    import zipfile, io
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        infolist = zf.infolist()
+        xml_candidates = [info for info in infolist if info.filename.lower().endswith(".xml")]
+        if not xml_candidates:
+            raise ValueError("Paket ZIP tidak berisi berkas deskripsi XML scene.")
+
+        # Pilih XML utama (file XML terbesar jika ada beberapa)
+        xml_candidates.sort(key=lambda info: info.file_size, reverse=True)
+        main_xml_info = xml_candidates[0]
+        xml_name = main_xml_info.filename
+        xml_text = zf.read(xml_name).decode("utf-8", errors="replace")
+
+        # Ekstrak judul preset
+        m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+        preset_title = m_title.group(1) if m_title else f"Alight Motion Preset ({package_id[:8]})"
+
+        # Simpan XML ke runtime/presets/
+        presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
+        os.makedirs(presets_dir, exist_ok=True)
+        with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
+            fp.write(xml_text)
+
+        # Siapkan folder media
+        media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
+        os.makedirs(media_dir, exist_ok=True)
+
+        media_list = []
+        for info in infolist:
+            fn = info.filename
+            if fn.endswith("/"):
+                continue
+            base_fn = os.path.basename(fn)
+            dest_media = os.path.join(media_dir, base_fn)
+            with open(dest_media, "wb") as fp:
+                fp.write(zf.read(fn))
+
+            mime, _ = mimetypes.guess_type(base_fn)
+            media_list.append({
+                "name": base_fn,
+                "size": info.file_size,
+                "mime": mime or "application/octet-stream",
+                "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
+            })
+
+    result = {
+        "url": clean_url,
+        "xml": xml_text,
+        "xmlName": xml_name,
+        "packageId": package_id,
+        "media": media_list,
+        "hasAudio": ("<audio" in xml_text),
+        "meta": {
+            "title": f"{preset_title} - Alight Motion",
+            "description": f"Preset diunduh langsung dari Alight Creative ({len(xml_text):,} karakter XML, {len(media_list)} media)."
+        },
+        "projects": [{"name": xml_name, "title": preset_title, "characters": len(xml_text)}],
+    }
+
+    # Simpan ke cache lokal agar pembukaan berikutnya super instan
+    _save_package_cache(package_id, project, result)
+    if not project:
+        _save_package_cache(package_id, None, result)
+
+    return result
+
 @app.get("/api/project-xml")
 async def get_project_xml(url: str, project: str = None):
     if not url:
@@ -464,19 +586,26 @@ async def get_project_xml(url: str, project: str = None):
         except Exception as e:
             return JSONResponse({"error": f"Gagal mengunduh XML: {str(e)}"}, status_code=400)
 
-    # 3. Link share resmi Alight Motion
+    # 3. Link share resmi Alight Motion (alightcreative.com / alight.link)
     if "alightcreative.com" not in url and "alight.link" not in url:
         return JSONResponse({
             "error": "Format link tidak dikenali. Masukkan link Alight Motion (alightcreative.com/am/share/...), link Google Drive XML, atau URL XML langsung."
         }, status_code=400)
 
-    # Cek cache offline terlebih dahulu
+    # Cek cache offline terlebih dahulu jika sudah pernah tersimpan lengkap
     cached = _offline_response(url, project)
     if cached:
         print(f"[project-xml] Memakai offline cache lokal untuk {_package_id_from_url(url)}")
         return cached
 
-    # Jika tidak ada di cache offline, coba remote (jika aktif)
+    # METODE UTAMA: Unduh langsung paket ZIP (XML + Media) dari Firebase Storage resmi Alight Creative
+    try:
+        data = await asyncio.to_thread(_download_am_direct_package, url, project)
+        return data
+    except Exception as e_direct:
+        print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({e_direct}), mencoba remote fallback...")
+
+    # Fallback: jika direct Firebase gagal, coba remote Zervida
     def fetch_remote():
         query_params = {"url": url}
         if project:
@@ -506,23 +635,18 @@ async def get_project_xml(url: str, project: str = None):
             if data.get("media"):
                 asyncio.create_task(asyncio.to_thread(_prefetch_media_background, package_id, data["media"]))
         return data
-    except urllib.error.HTTPError as e:
-        remote_error = f"HTTP {e.code}"
     except Exception as e:
         remote_error = str(e)
 
-    # Jika remote Zervida belum memiliki preset ini, ambil metadata nama preset dari Alight Creative
+    # Ambil metadata nama preset dari Alight Creative untuk pesan error yang ramah
     am_meta = await asyncio.to_thread(_get_am_share_metadata, url)
-    if am_meta and am_meta.get("title"):
-        preset_title = am_meta.get("title", "Alight Motion Preset")
-        return JSONResponse({
-            "error": f"Preset '{preset_title}' ditemukan, namun paket cloud diproteksi oleh Alight Motion Firebase App Check dan belum tersimpan di server perantara. Silakan gunakan link Google Drive XML atau unggah file XML preset ini secara langsung.",
-            "meta": am_meta
-        }, status_code=400)
+    preset_title = am_meta.get("title") if am_meta else None
+    err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
 
-    print(f"[project-xml] remote gagal ({remote_error}) dan tidak ada cache lokal")
+    print(f"[project-xml] Semua metode gagal untuk {url}: direct={e_direct}, remote={remote_error}")
     return JSONResponse({
-        "error": f"Link Alight Motion tidak dapat diambil otomatis ({remote_error or 'tidak ditemukan'}). Silakan gunakan link Google Drive XML atau unggah file XML/ZIP preset."
+        "error": f"{err_title_str} tidak dapat diunduh dari cloud ({e_direct}). Pastikan link share masih aktif di aplikasi Alight Motion, atau gunakan link Google Drive XML.",
+        "meta": am_meta
     }, status_code=400)
 
 @app.get("/api/effect-xml")
