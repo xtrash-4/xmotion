@@ -32,6 +32,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path.lower()
+    if path.endswith((".js", ".html", ".json", ".css")) or path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
@@ -329,11 +340,37 @@ def _offline_response(url: str, project: str):
             try:
                 data = json.load(open(path, encoding="utf-8"))
                 data["offline"] = True
-                data["hasAudio"] = ("<audio" in data.get("xml", ""))
+                xml_text = data.get("xml", "")
+                data["hasAudio"] = ("<audio" in xml_text)
+
+                media_list = data.get("media", [])
+                m_audio = re.search(r'<audio\s[^>]*?src=["\'](?:amproj:)?([^"\']+)["\']', xml_text, re.IGNORECASE)
+                xml_audio_fn = m_audio.group(1).split('/')[-1] if m_audio else None
+
+                has_audio_file = False
+                found_audio_item = None
+                if xml_audio_fn:
+                    for m in media_list:
+                        if m.get("name") == xml_audio_fn or (m.get("name") and m["name"].endswith(xml_audio_fn)):
+                            has_audio_file = True
+                            found_audio_item = m
+                            break
+                if not has_audio_file:
+                    for m in media_list:
+                        if m.get("mime", "").startswith("audio/") or any((m.get("name") or "").lower().endswith(ext) for ext in [".mp3", ".m4a", ".wav", ".aac"]):
+                            has_audio_file = True
+                            found_audio_item = m
+                            break
+
+                data["hasAudioFile"] = has_audio_file
+                data["missingCloudAudio"] = ("<audio" in xml_text) and not has_audio_file
+                if found_audio_item and not data.get("audioItem"):
+                    data["audioItem"] = found_audio_item
                 return data
             except (OSError, ValueError):
                 pass
     return None
+
 
 def _download_gdrive_xml(url: str):
     m = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url) or re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
@@ -540,6 +577,28 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
                 "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
             })
 
+        # Cek apakah berkas audio benar-benar disertakan di dalam paket
+        m_audio = re.search(r'<audio\s[^>]*?src=["\'](?:amproj:)?([^"\']+)["\']', xml_text, re.IGNORECASE)
+        xml_audio_fn = m_audio.group(1).split('/')[-1] if m_audio else None
+        
+        has_audio_file = False
+        found_audio_item = None
+        if xml_audio_fn:
+            for m in media_list:
+                if m["name"] == xml_audio_fn or m["name"].endswith(xml_audio_fn) or xml_audio_fn in m["name"]:
+                    has_audio_file = True
+                    found_audio_item = m
+                    break
+        if not has_audio_file:
+            for m in media_list:
+                if m.get("mime", "").startswith("audio/") or any(m["name"].lower().endswith(ext) for ext in [".mp3", ".m4a", ".wav", ".aac", ".ogg"]):
+                    has_audio_file = True
+                    found_audio_item = m
+                    break
+
+        missing_cloud_audio = ("<audio" in xml_text) and not has_audio_file
+
+
     result = {
         "url": clean_url,
         "xml": xml_text,
@@ -547,6 +606,9 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
         "packageId": package_id,
         "media": media_list,
         "hasAudio": ("<audio" in xml_text),
+        "hasAudioFile": has_audio_file,
+        "missingCloudAudio": missing_cloud_audio,
+        "audioItem": found_audio_item,
         "meta": {
             "title": f"{preset_title} - Alight Motion",
             "description": f"Preset diunduh langsung dari Alight Creative ({len(xml_text):,} karakter XML, {len(media_list)} media)."
@@ -560,6 +622,7 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
         _save_package_cache(package_id, None, result)
 
     return result
+
 
 @app.get("/api/project-xml")
 async def get_project_xml(url: str, project: str = None):
@@ -592,20 +655,24 @@ async def get_project_xml(url: str, project: str = None):
             "error": "Format link tidak dikenali. Masukkan link Alight Motion (alightcreative.com/am/share/...), link Google Drive XML, atau URL XML langsung."
         }, status_code=400)
 
-    # Cek cache offline terlebih dahulu jika sudah pernah tersimpan lengkap
-    cached = _offline_response(url, project)
-    if cached:
-        print(f"[project-xml] Memakai offline cache lokal untuk {_package_id_from_url(url)}")
-        return cached
-
-    # METODE UTAMA: Unduh langsung paket ZIP (XML + Media) dari Firebase Storage resmi Alight Creative
+    # METODE UTAMA: Selalu prioritaskan unduh langsung paket ZIP (XML + Media) fresh dari Firebase Storage Alight Creative
+    direct_error = None
     try:
         data = await asyncio.to_thread(_download_am_direct_package, url, project)
-        return data
+        if data and data.get("xml"):
+            print(f"[project-xml] Berhasil unduh langsung dari Firebase untuk {data.get('packageId')}")
+            return data
     except Exception as e_direct:
-        print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({e_direct}), mencoba remote fallback...")
+        direct_error = str(e_direct)
+        print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({e_direct}), mencoba cache lokal atau remote fallback...")
 
-    # Fallback: jika direct Firebase gagal, coba remote Zervida
+    # Cek cache offline jika download direct gagal (misal link 404 atau server cloud down)
+    cached = _offline_response(url, project)
+    if cached:
+        print(f"[project-xml] Memakai offline cache lokal fallback untuk {_package_id_from_url(url)}")
+        return cached
+
+    # Fallback: jika direct Firebase gagal dan tidak ada cache, coba remote Zervida
     def fetch_remote():
         query_params = {"url": url}
         if project:
@@ -642,6 +709,7 @@ async def get_project_xml(url: str, project: str = None):
     am_meta = await asyncio.to_thread(_get_am_share_metadata, url)
     preset_title = am_meta.get("title") if am_meta else None
     err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
+
 
     print(f"[project-xml] Semua metode gagal untuk {url}: direct={e_direct}, remote={remote_error}")
     return JSONResponse({

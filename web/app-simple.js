@@ -221,15 +221,93 @@ document.addEventListener('change', async (e) => {
   }, true);
 })();
 
+// Helper membuat file audio WAV hening (silent audio) untuk mereset engine secara bersih
+function createSilentAudioFile() {
+  const buffer = new ArrayBuffer(44);
+  const view = new DataView(buffer);
+  function writeString(offset, string) {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  }
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, 44100, true);
+  view.setUint32(28, 44100 * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, 0, true);
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return new File([blob], 'silence.wav', { type: 'audio/wav' });
+}
+
+// Helper membuat gambar placeholder elegan untuk slot preset yang tidak menyertakan foto di cloud
+function createSlotPlaceholder(slotIndex, slotTitle) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext('2d');
+  
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1920);
+  grad.addColorStop(0, '#090d16');
+  grad.addColorStop(0.5, '#1e1b4b');
+  grad.addColorStop(1, '#090d16');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1080, 1920);
+
+  ctx.strokeStyle = 'rgba(99, 102, 241, 0.4)';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(36, 36, 1008, 1848);
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 88px Outfit, Inter, sans-serif';
+  ctx.fillText(`KLIP ${slotIndex}`, 540, 920);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '40px Inter, sans-serif';
+  ctx.fillText('Ketuk "Ganti Foto" untuk memasang foto Anda', 540, 1010);
+
+  if (slotTitle) {
+    ctx.fillStyle = '#6366f1';
+    ctx.font = '30px Inter, sans-serif';
+    ctx.fillText(slotTitle.slice(0, 32), 540, 1080);
+  }
+
+  return new Promise(resolve => {
+    canvas.toBlob(blob => {
+      resolve(new File([blob], `placeholder_${slotIndex}.jpg`, { type: 'image/jpeg' }));
+    }, 'image/jpeg', 0.88);
+  });
+}
+
 // Helper standar untuk memasang audio ke engine runtime WebGL dan menyinkronkan state
 async function applyEngineAudio(audioFileOrBlob, displayName) {
-  if (!audioFileOrBlob) return null;
-  window.__customAudio = audioFileOrBlob;
+  const audioLabel = document.getElementById('capcutAudioLabel');
 
+  if (!audioFileOrBlob) {
+    window.__customAudio = null;
+    if (audioLabel) audioLabel.textContent = '+ Pilih Lagu';
+    try {
+      const silent = createSilentAudioFile();
+      if (window.AM && typeof window.AM.setAudio === 'function') {
+        await window.AM.setAudio(silent);
+        console.log('[XEDITZ Audio] Audio engine berhasil di-reset ke hening (silent).');
+      }
+    } catch (e) {
+      console.warn('[XEDITZ Audio] Gagal mereset audio engine:', e);
+    }
+    return null;
+  }
+
+  window.__customAudio = audioFileOrBlob;
   const resolvedName = displayName || audioFileOrBlob.name || 'Musik Preset';
 
   // 1. Update UI label CapCut di header jika ada
-  const audioLabel = document.getElementById('capcutAudioLabel');
   if (audioLabel) {
     audioLabel.textContent = resolvedName.length > 12 ? resolvedName.slice(0, 11) + '…' : resolvedName;
   }
@@ -249,6 +327,7 @@ async function applyEngineAudio(audioFileOrBlob, displayName) {
   return null;
 }
 window.__applyEngineAudio = applyEngineAudio;
+
 
 // Listener change tangkap jika ada file audio yang disuntikkan ke #impPhoto
 document.addEventListener('change', async (e) => {
@@ -616,6 +695,18 @@ document.addEventListener('DOMContentLoaded', () => {
       btnFetchAm.disabled = true;
       showAmStatus('loading', 'Menghubungkan ke sumber preset...', 'Memeriksa paket XML dan asset media...');
 
+      // 0. Hentikan pemutaran video lama jika sedang berjalan
+      try {
+        if (window.AM && typeof window.AM.getState === 'function' && window.AM.getState().isPlaying) {
+          const btnPlay = document.getElementById('play');
+          if (btnPlay) btnPlay.click();
+        }
+      } catch (pErr) { /* ignore */ }
+
+      // 0b. WAJIB: Bersihkan audio lama sebelum impor dimulai agar tidak menjadi zombie / residu
+      await applyEngineAudio(null);
+      window.__customAudio = null;
+
       // Reset file slot dan framing preset lama
       window.__slotFiles = {};
       window.__slotPicked = {};
@@ -696,7 +787,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (engineReady && window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
           showAmStatus('loading', 'Memasang foto dan aset preset...', projectTitle);
           const currentSlots = window.AM.getMediaSlots();
+          let slotIdx = 0;
           for (const slot of currentSlots) {
+            slotIdx++;
             const cleanId = (slot.id || '').replace(/^amproj:/, '');
             const matched = mediaList.find(m => m.name === cleanId || m.name === slot.name || (m.name && cleanId.includes(m.name)));
             if (matched && matched.url) {
@@ -718,13 +811,21 @@ document.addEventListener('DOMContentLoaded', () => {
               } catch (mErr) {
                 console.warn('[Apply Preset Media Warn]', slot.id, mErr);
               }
+            } else {
+              // Jika preset tidak memiliki media di cloud, pasang placeholder bersih agar foto preset lama tidak tertahan!
+              try {
+                const placeholder = await createSlotPlaceholder(slotIdx, slot.name || cleanId);
+                await window.AM.applyMedia(slot.id, placeholder);
+              } catch (phErr) {
+                console.warn('[Placeholder Apply Warn]', slot.id, phErr);
+              }
             }
           }
         }
 
         // 4c. Pasang audio bawaan preset (mendukung file .mp3, .m4a, maupun track sound TikTok .mp4)
-        let audioItem = null;
-        if (typeof data.xml === 'string') {
+        let audioItem = data.audioItem || null;
+        if (!audioItem && typeof data.xml === 'string') {
           const mAudio = data.xml.match(/<audio\s[^>]*?src=["'](?:amproj:)?([^"']+)["']/i);
           if (mAudio && mAudio[1]) {
             const rawAudio = mAudio[1].split('/').pop().replace(/^amproj:/, '');
@@ -734,10 +835,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!audioItem) {
           audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
         }
-        if (!audioItem) {
-          audioItem = mediaList.find(m => /\.(mp4|mov|webm)$/i.test(m.name || '') || (m.mime && m.mime.startsWith('video/')));
-        }
 
+        let audioSuccess = false;
         if (audioItem && audioItem.url) {
           try {
             let audioFetchUrl = audioItem.url;
@@ -753,22 +852,30 @@ document.addEventListener('DOMContentLoaded', () => {
               
               // Langsung pasang ke engine WebGL lewat window.AM.setAudio
               await applyEngineAudio(aFile, audioItem.name);
+              audioSuccess = true;
             }
           } catch (aErr) {
             console.warn('[Auto Audio Load Warning]', aErr);
           }
         }
 
+        // PENTING: Jika audio tidak ada di paket cloud atau gagal dimuat,
+        // PASTIKAN tetap panggil applyEngineAudio(null) agar lagu lama Beraksi.mp3 TIDAK PERNAH memutar!
+        if (!audioSuccess) {
+          await applyEngineAudio(null);
+        }
+
         // 5. Selesaikan impor
         btnFetchAm.disabled = false;
 
-        const engineState = (window.AM && typeof window.AM.getState === 'function') ? window.AM.getState() : {};
         const slots = (window.AM && typeof window.AM.getMediaSlots === 'function') ? window.AM.getMediaSlots() : [];
 
-        const hasAudio = (data.hasAudio !== false) && !!engineState.hasAudio;
+        const hasAudio = audioSuccess;
         const audioLabel = document.getElementById('capcutAudioLabel');
         if (audioLabel) {
-          audioLabel.textContent = hasAudio ? 'Musik Asli' : '+ Pilih Lagu';
+          audioLabel.textContent = hasAudio 
+            ? (audioItem?.name ? (audioItem.name.length > 12 ? audioItem.name.slice(0, 11) + '…' : audioItem.name) : 'Musik Asli')
+            : '+ Pilih Lagu';
         }
 
         if (typeof tidySlots === 'function') {
@@ -787,15 +894,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const slotNum = slots.length || mediaList.length;
         if (engineReady) {
-          showAmStatus('success', `Preset "${projectTitle}" Berhasil Dimuat!`,
-            hasAudio
-              ? `${slotNum} klip terpasang dengan musik. Siap dimainkan.`
-              : `Preset dimuat (${slotNum} klip). Ketuk Musik di atas untuk memasang lagu atau audio TikTok.`);
+          const detailMsg = hasAudio
+            ? `${slotNum} klip terpasang dengan musik asli. Siap dimainkan.`
+            : `Preset dimuat (${slotNum} klip). Catatan: Pembuat preset tidak mengunggah lagu ke cloud — silakan ketuk "Musik" di atas untuk memasang lagu.`;
+          showAmStatus('success', `Preset "${projectTitle}" Berhasil Dimuat!`, detailMsg);
         } else {
           showAmStatus('error', 'Mesin WebGL belum selesai memuat.',
             'Preset mungkin tidak valid atau engine belum siap. Coba muat ulang halaman.');
         }
         if (impState) impState.textContent = `Preset aktif: ${projectTitle}`;
+
 
       } catch (err) {
         console.error('[Link AM Import Error]', err);
