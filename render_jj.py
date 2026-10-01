@@ -9,13 +9,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 # =====================================================================
 # CONFIGURATION & CONSTANTS
-# =====================================================================
-DEFAULT_OUTPUT = "c:/Users/Hype/Desktop/xprest/hasil_jedag_jedug.mp4"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OUTPUT = os.path.join(BASE_DIR, "hasil_jedag_jedug.mp4")
 DEFAULT_AUDIO = os.path.join(BASE_DIR, "audio.m4a")
-XML_PATH = "c:/Users/Hype/Desktop/xprest/#685.xml"
-DEFAULT_FOTO1 = "c:/Users/Hype/Desktop/xprest/foto1.jpg"
-DEFAULT_FOTO2 = "c:/Users/Hype/Desktop/xprest/foto2.jpg"
+XML_PATH = os.path.join(BASE_DIR, "#685.xml")
+DEFAULT_FOTO1 = os.path.join(BASE_DIR, "foto1.jpg")
+DEFAULT_FOTO2 = os.path.join(BASE_DIR, "foto2.jpg")
 
 W, H = 720, 1280
 H2 = H // 2
@@ -267,8 +266,8 @@ class AMShape:
         }
 
 # Load XML structure
-tree = ET.parse(XML_PATH)
-root_elem = tree.getroot()
+tree = ET.parse(XML_PATH) if os.path.exists(XML_PATH) else None
+root_elem = tree.getroot() if tree is not None else []
 shapes_dict = {c.attrib['id']: AMShape(c) for c in root_elem if c.tag == 'shape'}
 
 # 16 XML Beat Bookmark partitions (9341ms to 16908ms)
