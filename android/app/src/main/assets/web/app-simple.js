@@ -221,13 +221,43 @@ document.addEventListener('change', async (e) => {
   }, true);
 })();
 
-// Catat musik yang dipasang lewat #impPhoto (Audio Hub / musik bawaan) supaya bisa dipasang ulang
-// setelah preset dimuat ulang (mis. saat menerapkan edit teks). Hanya referensi di memori.
-document.addEventListener('change', (e) => {
+// Helper standar untuk memasang audio ke engine runtime WebGL dan menyinkronkan state
+async function applyEngineAudio(audioFileOrBlob, displayName) {
+  if (!audioFileOrBlob) return null;
+  window.__customAudio = audioFileOrBlob;
+
+  const resolvedName = displayName || audioFileOrBlob.name || 'Musik Preset';
+
+  // 1. Update UI label CapCut di header jika ada
+  const audioLabel = document.getElementById('capcutAudioLabel');
+  if (audioLabel) {
+    audioLabel.textContent = resolvedName.length > 12 ? resolvedName.slice(0, 11) + '…' : resolvedName;
+  }
+
+  // 2. Hubungkan langsung ke window.AM.setAudio API engine
+  if (window.AM && typeof window.AM.setAudio === 'function') {
+    try {
+      const res = await window.AM.setAudio(audioFileOrBlob);
+      console.log('[XEDITZ Audio] Audio engine berhasil dipasang:', resolvedName, res);
+      return res;
+    } catch (err) {
+      console.error('[XEDITZ Audio Error] Gagal memanggil window.AM.setAudio:', err);
+    }
+  } else {
+    console.warn('[XEDITZ Audio] window.AM.setAudio belum siap atau tidak tersedia');
+  }
+  return null;
+}
+window.__applyEngineAudio = applyEngineAudio;
+
+// Listener change tangkap jika ada file audio yang disuntikkan ke #impPhoto
+document.addEventListener('change', async (e) => {
   const input = e.target;
   if (!input || input.id !== 'impPhoto' || !input.files || !input.files.length) return;
-  const audio = Array.from(input.files).find((f) => /^audio\//.test(f.type) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(f.name));
-  if (audio) window.__customAudio = audio;
+  const audio = Array.from(input.files).find((f) => /^audio\//.test(f.type) || /\.(mp3|m4a|wav|aac|ogg|mp4)$/i.test(f.name));
+  if (audio) {
+    await applyEngineAudio(audio);
+  }
 }, true);
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -334,14 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (audioResp.ok && !window.__cancelAutoLoad) {
             const audioBlob = await audioResp.blob();
             const audioFile = new File([audioBlob], 'Beraksi.mp3', { type: 'audio/mp4' });
-            const adt = new DataTransfer();
-            adt.items.add(audioFile);
-
-            const impPhoto = document.getElementById('impPhoto');
-            if (impPhoto && !window.__cancelAutoLoad) {
-              impPhoto.files = adt.files;
-              impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            await applyEngineAudio(audioFile, 'Beraksi.mp3');
           }
         } catch (aErr) {
           console.warn('[Audio Load Warning]', aErr);
@@ -383,9 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
-        // Instant client-side audio injection
-        const impPhoto = document.getElementById('impPhoto');
-        
         // Also upload to server for ffmpeg extraction if needed
         const formData = new FormData();
         formData.append('video', file);
@@ -398,17 +418,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resp.ok) {
           const data = await resp.json();
           if (data.url) {
-            // Load audio via engine impPhoto
             const audioFetch = await fetch(data.url);
             const audioBlob = await audioFetch.blob();
             const extractedFile = new File([audioBlob], data.filename || 'extracted_audio.mp3', { type: 'audio/mp3' });
             
-            const dt = new DataTransfer();
-            dt.items.add(extractedFile);
-            if (impPhoto) {
-              impPhoto.files = dt.files;
-              impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            await applyEngineAudio(extractedFile, data.filename);
 
             if (videoAudioState) {
               videoAudioState.style.color = '#34d399';
@@ -420,12 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Fallback: direct blob
         const fallbackAudio = new File([file], file.name.replace(/\.[^/.]+$/, "") + ".mp3", { type: 'audio/mp3' });
-        const dt = new DataTransfer();
-        dt.items.add(fallbackAudio);
-        if (impPhoto) {
-          impPhoto.files = dt.files;
-          impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        await applyEngineAudio(fallbackAudio, fallbackAudio.name);
 
         if (videoAudioState) {
           videoAudioState.style.color = '#34d399';
@@ -474,13 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const aBlob = await aResp.blob();
           const aFile = new File([aBlob], data.filename || 'tiktok_audio.mp3', { type: 'audio/mp3' });
           
-          const dt = new DataTransfer();
-          dt.items.add(aFile);
-          const impPhoto = document.getElementById('impPhoto');
-          if (impPhoto) {
-            impPhoto.files = dt.files;
-            impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-          }
+          await applyEngineAudio(aFile, data.filename);
 
           if (urlTiktokState) {
             urlTiktokState.style.color = '#34d399';
@@ -502,17 +505,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 5. UPLOAD FILE AUDIO LANGSUNG (MP3/M4A)
   const directAudioInput = document.getElementById('directAudioInput');
   if (directAudioInput) {
-    directAudioInput.addEventListener('change', (e) => {
+    directAudioInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      const impPhoto = document.getElementById('impPhoto');
-      if (impPhoto) {
-        impPhoto.files = dt.files;
-        impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-      }
+      await applyEngineAudio(file, file.name);
     });
   }
 
@@ -729,10 +725,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 4c. Pasang audio bawaan preset (mendukung file .mp3, .m4a, maupun track sound TikTok .mp4)
         let audioItem = null;
         if (typeof data.xml === 'string') {
-          const mAudio = data.xml.match(/<audio\s[^>]*?src=["']amproj:([^"']+)["']/i);
+          const mAudio = data.xml.match(/<audio\s[^>]*?src=["'](?:amproj:)?([^"']+)["']/i);
           if (mAudio && mAudio[1]) {
-            const xmlAudioName = mAudio[1];
-            audioItem = mediaList.find(m => m.name === xmlAudioName || (m.name && m.name.endsWith(xmlAudioName)));
+            const rawAudio = mAudio[1].split('/').pop().replace(/^amproj:/, '');
+            audioItem = mediaList.find(m => m.name === rawAudio || (m.name && m.name.endsWith(rawAudio)) || (m.name && rawAudio.includes(m.name)));
           }
         }
         if (!audioItem) {
@@ -754,13 +750,9 @@ document.addEventListener('DOMContentLoaded', () => {
               const isVideoTrack = /\.(mp4|mov|webm)$/i.test(audioItem.name || '') || (audioItem.mime && audioItem.mime.startsWith('video/'));
               const mimeType = isVideoTrack ? (aBlob.type || 'video/mp4') : (aBlob.type || audioItem.mime || 'audio/mp3');
               const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp4', { type: mimeType });
-              const impPhoto = document.getElementById('impPhoto');
-              if (impPhoto) {
-                const dtAudio = new DataTransfer();
-                dtAudio.items.add(aFile);
-                impPhoto.files = dtAudio.files;
-                impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-              }
+              
+              // Langsung pasang ke engine WebGL lewat window.AM.setAudio
+              await applyEngineAudio(aFile, audioItem.name);
             }
           } catch (aErr) {
             console.warn('[Auto Audio Load Warning]', aErr);
@@ -922,7 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Rapikan daftar slot yang dibuat engine: sembunyikan media yang hanya sumber musik,
   // beri label tombol sesuai jenis, dan hitung jumlah slot yang tampil.
   let tidying = false;
-  const tidySlots = () => {
+  function tidySlots() {
     if (!mediaRows || tidying) return;
     tidying = true;
     try {
@@ -1347,15 +1339,9 @@ document.addEventListener('DOMContentLoaded', () => {
       try { await window.AM.applyMedia(slotId, file); } catch (err) { console.warn('[Reload] gagal pasang ulang media', slotId, err); }
     }
     if (window.__customAudio) {
-      const adt = new DataTransfer();
-      adt.items.add(window.__customAudio);
-      const impPhoto = document.getElementById('impPhoto');
-      if (impPhoto) {
-        impPhoto.files = adt.files;
-        impPhoto.dispatchEvent(new Event('change', { bubbles: true }));
-        await sleep(600);
-        await waitEngineIdle();
-      }
+      await applyEngineAudio(window.__customAudio);
+      await sleep(300);
+      await waitEngineIdle();
     }
     updateExportResolutionOptions(rConfig.ratio);
   };
