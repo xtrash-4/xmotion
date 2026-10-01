@@ -320,7 +320,7 @@ def _rebuild_from_local_files(package_id: str, url: str):
     }
 
 def _offline_response(url: str, project: str):
-    """Cache JSON lebih dulu, lalu rekonstruksi dari berkas lokal. None jika tidak ada."""
+    """Hanya kembalikan data jika ada cache JSON paket yang valid. Jangan asal tebak dari file lokal sembarang."""
     package_id = _package_id_from_url(url)
     if not package_id:
         return None
@@ -333,9 +333,7 @@ def _offline_response(url: str, project: str):
                 return data
             except (OSError, ValueError):
                 pass
-    if project:
-        return None  # proyek tertentu yang belum pernah diambil: jangan diganti proyek lain
-    return _rebuild_from_local_files(package_id, url)
+    return None
 
 def _download_gdrive_xml(url: str):
     m = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url) or re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
@@ -413,33 +411,6 @@ def _get_am_share_metadata(url: str):
     except Exception:
         return None
 
-def _find_matching_local_preset(title: str):
-    if not title:
-        return None
-    clean_title = re.sub(r'[^a-zA-Z0-9]', '', title).lower()
-    if len(clean_title) < 5:
-        return None
-    search_dirs = [
-        os.path.join(WEB_DIR, "runtime", "presets"),
-        BASE_DIR,
-        os.path.join(BASE_DIR, "preset 2"),
-        os.path.join(BASE_DIR, "preset 3")
-    ]
-    for sdir in search_dirs:
-        if not os.path.exists(sdir):
-            continue
-        for f in glob.glob(os.path.join(sdir, "*.xml")):
-            fname = os.path.splitext(os.path.basename(f))[0]
-            clean_fname = re.sub(r'[^a-zA-Z0-9]', '', fname).lower()
-            if len(clean_fname) >= 5 and (clean_title == clean_fname or clean_fname in clean_title or clean_title in clean_fname):
-                try:
-                    with open(f, "r", encoding="utf-8", errors="replace") as fp:
-                        content = fp.read()
-                    if "<scene" in content:
-                        return f, os.path.basename(f), content
-                except Exception:
-                    pass
-    return None
 
 def _prefetch_media_background(package_id: str, media_list: list):
     media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
@@ -512,7 +483,7 @@ async def get_project_xml(url: str, project: str = None):
             query_params["project"] = project
         remote_api = "https://am.zervida.my.id/api/project-xml?" + urllib.parse.urlencode(query_params)
         req = urllib.request.Request(remote_api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        with urllib.request.urlopen(req, timeout=25) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         if not isinstance(data, dict) or not data.get("xml"):
             raise ValueError("respons remote tidak berisi xml")
@@ -540,35 +511,19 @@ async def get_project_xml(url: str, project: str = None):
     except Exception as e:
         remote_error = str(e)
 
-    # Jika remote Zervida mati / gagal, ambil metadata asli dari alightcreative.com
+    # Jika remote Zervida belum memiliki preset ini, ambil metadata nama preset dari Alight Creative
     am_meta = await asyncio.to_thread(_get_am_share_metadata, url)
     if am_meta and am_meta.get("title"):
-        match_result = _find_matching_local_preset(am_meta["title"])
-        if match_result:
-            file_path, base_name, xml_content = match_result
-            print(f"[project-xml] Menemukan pencocokan preset lokal '{base_name}' untuk link '{am_meta['title']}'")
-            return {
-                "url": url,
-                "xml": xml_content,
-                "xmlName": base_name,
-                "packageId": _package_id_from_url(url) or "local_match",
-                "media": [],
-                "meta": {
-                    "title": am_meta["title"],
-                    "description": f"Ditemukan dan dimuat dari koleksi XML lokal ({base_name}).",
-                    "thumb": am_meta.get("thumb", "")
-                },
-                "projects": [{"name": base_name, "title": am_meta["title"], "characters": len(xml_content)}]
-            }
-
-        preset_title = am_meta.get("title", "Alight Motion")
+        preset_title = am_meta.get("title", "Alight Motion Preset")
         return JSONResponse({
-            "error": f"Preset '{preset_title}' terdeteksi dari link Alight Motion. Karena paket file di server Google Cloud diproteksi Firebase App Check resmi, silakan gunakan link Google Drive XML atau unggah file XML/ZIP preset ini.",
+            "error": f"Preset '{preset_title}' ditemukan, namun paket cloud diproteksi oleh Alight Motion Firebase App Check dan belum tersimpan di server perantara. Silakan gunakan link Google Drive XML atau unggah file XML preset ini secara langsung.",
             "meta": am_meta
         }, status_code=400)
 
     print(f"[project-xml] remote gagal ({remote_error}) dan tidak ada cache lokal")
-    return JSONResponse({"error": REMOTE_DOWN_MSG}, status_code=503)
+    return JSONResponse({
+        "error": f"Link Alight Motion tidak dapat diambil otomatis ({remote_error or 'tidak ditemukan'}). Silakan gunakan link Google Drive XML atau unggah file XML/ZIP preset."
+    }, status_code=400)
 
 @app.get("/api/effect-xml")
 async def get_effect_xml(id: str = ""):

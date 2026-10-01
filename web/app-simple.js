@@ -620,6 +620,11 @@ document.addEventListener('DOMContentLoaded', () => {
       btnFetchAm.disabled = true;
       showAmStatus('loading', 'Menghubungkan ke sumber preset...', 'Memeriksa paket XML dan asset media...');
 
+      // Reset file slot dan framing preset lama
+      window.__slotFiles = {};
+      window.__slotPicked = {};
+      window.__slotRawFiles = {};
+
       try {
         // 1. Sinkronkan ke input engine tersembunyi
         if (urlAm) urlAm.value = link;
@@ -691,14 +696,64 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Pasang audio bawaan preset (jika ada) setelah scene dimuat
-        const audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+        // 4b. Pasang foto dan video asli bawaan preset ke media slots engine
+        if (engineReady && window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
+          showAmStatus('loading', 'Memasang foto dan aset preset...', projectTitle);
+          const currentSlots = window.AM.getMediaSlots();
+          for (const slot of currentSlots) {
+            const cleanId = (slot.id || '').replace(/^amproj:/, '');
+            const matched = mediaList.find(m => m.name === cleanId || m.name === slot.name || (m.name && cleanId.includes(m.name)));
+            if (matched && matched.url) {
+              try {
+                let fetchUrl = matched.url;
+                if (window.__API_BASE && fetchUrl.startsWith('/api/')) {
+                  fetchUrl = window.__API_BASE.replace(/\/+$/, '') + fetchUrl;
+                }
+                const mResp = await fetch(fetchUrl);
+                if (mResp.ok) {
+                  const mBlob = await mResp.blob();
+                  const isVid = (matched.mime && matched.mime.startsWith('video/')) || /\.(mp4|mov|webm)$/i.test(matched.name || '');
+                  const mType = isVid ? (mBlob.type || 'video/mp4') : (mBlob.type || 'image/jpeg');
+                  const mFile = new File([mBlob], matched.name || cleanId, { type: mType });
+                  await window.AM.applyMedia(slot.id, mFile);
+                  window.__slotFiles[slot.id] = mFile;
+                  window.__slotPicked[slot.id] = matched.name || cleanId;
+                }
+              } catch (mErr) {
+                console.warn('[Apply Preset Media Warn]', slot.id, mErr);
+              }
+            }
+          }
+        }
+
+        // 4c. Pasang audio bawaan preset (mendukung file .mp3, .m4a, maupun track sound TikTok .mp4)
+        let audioItem = null;
+        if (typeof data.xml === 'string') {
+          const mAudio = data.xml.match(/<audio\s[^>]*?src=["']amproj:([^"']+)["']/i);
+          if (mAudio && mAudio[1]) {
+            const xmlAudioName = mAudio[1];
+            audioItem = mediaList.find(m => m.name === xmlAudioName || (m.name && m.name.endsWith(xmlAudioName)));
+          }
+        }
+        if (!audioItem) {
+          audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+        }
+        if (!audioItem) {
+          audioItem = mediaList.find(m => /\.(mp4|mov|webm)$/i.test(m.name || '') || (m.mime && m.mime.startsWith('video/')));
+        }
+
         if (audioItem && audioItem.url) {
           try {
-            const aResp = await fetch(audioItem.url);
+            let audioFetchUrl = audioItem.url;
+            if (window.__API_BASE && audioFetchUrl.startsWith('/api/')) {
+              audioFetchUrl = window.__API_BASE.replace(/\/+$/, '') + audioFetchUrl;
+            }
+            const aResp = await fetch(audioFetchUrl);
             if (aResp.ok) {
               const aBlob = await aResp.blob();
-              const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp3', { type: audioItem.mime || 'audio/mp3' });
+              const isVideoTrack = /\.(mp4|mov|webm)$/i.test(audioItem.name || '') || (audioItem.mime && audioItem.mime.startsWith('video/'));
+              const mimeType = isVideoTrack ? (aBlob.type || 'video/mp4') : (aBlob.type || audioItem.mime || 'audio/mp3');
+              const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp4', { type: mimeType });
               const impPhoto = document.getElementById('impPhoto');
               if (impPhoto) {
                 const dtAudio = new DataTransfer();
@@ -728,6 +783,14 @@ document.addEventListener('DOMContentLoaded', () => {
           tidySlots();
         } else if (typeof window.__tidySlots === 'function') {
           window.__tidySlots();
+        }
+
+        // Trigger render WebGL ke frame awal agar tampilan kanvas langsung berganti foto baru
+        const seekEl = document.getElementById('seek');
+        if (seekEl) {
+          seekEl.value = 0;
+          seekEl.dispatchEvent(new Event('input', { bubbles: true }));
+          seekEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         const slotNum = slots.length || mediaList.length;

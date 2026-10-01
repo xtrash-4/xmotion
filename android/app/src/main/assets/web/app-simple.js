@@ -178,6 +178,49 @@ document.addEventListener('change', async (e) => {
   try { input.dispatchEvent(new Event('change', { bubbles: true })); } finally { input.__xmlFixed = false; }
 }, true);
 
+// Jembatan simpan untuk APK Android: WebView tidak bisa mengunduh blob: lewat <a download>,
+// jadi hasil ekspor dikirim per potongan ke AndroidNative dan disimpan di Download/XEDITZ.
+(function androidDownloadBridge() {
+  const native = window.AndroidNative;
+  if (!native || typeof native.saveBegin !== 'function') return;
+  const notify = (msg) => (typeof window.__toast === 'function' ? window.__toast(msg) : console.log('[XEDITZ]', msg));
+  const readBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('gagal membaca data'));
+    reader.readAsDataURL(blob);
+  });
+  const check = (res, fallback) => {
+    if (!String(res).startsWith('OK')) throw new Error(String(res).split('|')[1] || fallback);
+  };
+  let saving = false;
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest && e.target.closest('a[download]');
+    if (!link || !link.href) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (saving) return;
+    saving = true;
+    const name = link.getAttribute('download') || 'xeditz.mp4';
+    try {
+      notify('Menyimpan video ke perangkat...');
+      const blob = await (await fetch(link.href)).blob();
+      check(native.saveBegin(name, blob.type || 'video/mp4'), 'gagal memulai penyimpanan');
+      const CHUNK = 3 * 256 * 1024; // kelipatan 3 byte: base64 tiap potongan berdiri sendiri
+      for (let off = 0; off < blob.size; off += CHUNK) {
+        check(native.saveChunk(await readBase64(blob.slice(off, off + CHUNK))), 'gagal menulis berkas');
+      }
+      check(native.saveEnd(), 'gagal menyelesaikan berkas');
+    } catch (err) {
+      try { native.saveAbort(); } catch (ignore) { /* sudah tertutup */ }
+      console.error('[XEDITZ] simpan gagal:', err);
+      notify('Gagal menyimpan video: ' + err.message);
+    } finally {
+      saving = false;
+    }
+  }, true);
+})();
+
 // Catat musik yang dipasang lewat #impPhoto (Audio Hub / musik bawaan) supaya bisa dipasang ulang
 // setelah preset dimuat ulang (mis. saat menerapkan edit teks). Hanya referensi di memori.
 document.addEventListener('change', (e) => {
@@ -577,6 +620,11 @@ document.addEventListener('DOMContentLoaded', () => {
       btnFetchAm.disabled = true;
       showAmStatus('loading', 'Menghubungkan ke sumber preset...', 'Memeriksa paket XML dan asset media...');
 
+      // Reset file slot dan framing preset lama
+      window.__slotFiles = {};
+      window.__slotPicked = {};
+      window.__slotRawFiles = {};
+
       try {
         // 1. Sinkronkan ke input engine tersembunyi
         if (urlAm) urlAm.value = link;
@@ -648,14 +696,64 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Pasang audio bawaan preset (jika ada) setelah scene dimuat
-        const audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+        // 4b. Pasang foto dan video asli bawaan preset ke media slots engine
+        if (engineReady && window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
+          showAmStatus('loading', 'Memasang foto dan aset preset...', projectTitle);
+          const currentSlots = window.AM.getMediaSlots();
+          for (const slot of currentSlots) {
+            const cleanId = (slot.id || '').replace(/^amproj:/, '');
+            const matched = mediaList.find(m => m.name === cleanId || m.name === slot.name || (m.name && cleanId.includes(m.name)));
+            if (matched && matched.url) {
+              try {
+                let fetchUrl = matched.url;
+                if (window.__API_BASE && fetchUrl.startsWith('/api/')) {
+                  fetchUrl = window.__API_BASE.replace(/\/+$/, '') + fetchUrl;
+                }
+                const mResp = await fetch(fetchUrl);
+                if (mResp.ok) {
+                  const mBlob = await mResp.blob();
+                  const isVid = (matched.mime && matched.mime.startsWith('video/')) || /\.(mp4|mov|webm)$/i.test(matched.name || '');
+                  const mType = isVid ? (mBlob.type || 'video/mp4') : (mBlob.type || 'image/jpeg');
+                  const mFile = new File([mBlob], matched.name || cleanId, { type: mType });
+                  await window.AM.applyMedia(slot.id, mFile);
+                  window.__slotFiles[slot.id] = mFile;
+                  window.__slotPicked[slot.id] = matched.name || cleanId;
+                }
+              } catch (mErr) {
+                console.warn('[Apply Preset Media Warn]', slot.id, mErr);
+              }
+            }
+          }
+        }
+
+        // 4c. Pasang audio bawaan preset (mendukung file .mp3, .m4a, maupun track sound TikTok .mp4)
+        let audioItem = null;
+        if (typeof data.xml === 'string') {
+          const mAudio = data.xml.match(/<audio\s[^>]*?src=["']amproj:([^"']+)["']/i);
+          if (mAudio && mAudio[1]) {
+            const xmlAudioName = mAudio[1];
+            audioItem = mediaList.find(m => m.name === xmlAudioName || (m.name && m.name.endsWith(xmlAudioName)));
+          }
+        }
+        if (!audioItem) {
+          audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+        }
+        if (!audioItem) {
+          audioItem = mediaList.find(m => /\.(mp4|mov|webm)$/i.test(m.name || '') || (m.mime && m.mime.startsWith('video/')));
+        }
+
         if (audioItem && audioItem.url) {
           try {
-            const aResp = await fetch(audioItem.url);
+            let audioFetchUrl = audioItem.url;
+            if (window.__API_BASE && audioFetchUrl.startsWith('/api/')) {
+              audioFetchUrl = window.__API_BASE.replace(/\/+$/, '') + audioFetchUrl;
+            }
+            const aResp = await fetch(audioFetchUrl);
             if (aResp.ok) {
               const aBlob = await aResp.blob();
-              const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp3', { type: audioItem.mime || 'audio/mp3' });
+              const isVideoTrack = /\.(mp4|mov|webm)$/i.test(audioItem.name || '') || (audioItem.mime && audioItem.mime.startsWith('video/'));
+              const mimeType = isVideoTrack ? (aBlob.type || 'video/mp4') : (aBlob.type || audioItem.mime || 'audio/mp3');
+              const aFile = new File([aBlob], audioItem.name || 'preset_audio.mp4', { type: mimeType });
               const impPhoto = document.getElementById('impPhoto');
               if (impPhoto) {
                 const dtAudio = new DataTransfer();
@@ -685,6 +783,14 @@ document.addEventListener('DOMContentLoaded', () => {
           tidySlots();
         } else if (typeof window.__tidySlots === 'function') {
           window.__tidySlots();
+        }
+
+        // Trigger render WebGL ke frame awal agar tampilan kanvas langsung berganti foto baru
+        const seekEl = document.getElementById('seek');
+        if (seekEl) {
+          seekEl.value = 0;
+          seekEl.dispatchEvent(new Event('input', { bubbles: true }));
+          seekEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         const slotNum = slots.length || mediaList.length;
@@ -1374,6 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('is-visible'), 4200);
   };
+  window.__toast = toast;
 
   const setWelcomeStatus = (kind, title, desc) => {
     if (!wStatus) return;
@@ -1529,6 +1636,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  // Tombol Back Android (dipanggil MainActivity.onBackPressed): true = sudah ditangani halaman.
+  window.__androidBack = () => {
+    if (exportModal && exportModal.open) { exportModal.close(); return true; }
+    const framing = byId('framingModal');
+    if (framing && framing.style.display === 'flex') { byId('btnFramingClose')?.click(); return true; }
+    if (homeScreen && !homeScreen.hidden) return false;   // di beranda: keluar aplikasi
+    btnBackToHome?.click();                               // dari pilih sumber / editor: kembali ke beranda
+    return true;
+  };
   wPaste?.addEventListener('click', async () => {
     try {
       const text = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : '';
