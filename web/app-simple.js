@@ -178,6 +178,49 @@ document.addEventListener('change', async (e) => {
   try { input.dispatchEvent(new Event('change', { bubbles: true })); } finally { input.__xmlFixed = false; }
 }, true);
 
+// Jembatan simpan untuk APK Android: WebView tidak bisa mengunduh blob: lewat <a download>,
+// jadi hasil ekspor dikirim per potongan ke AndroidNative dan disimpan di Download/XEDITZ.
+(function androidDownloadBridge() {
+  const native = window.AndroidNative;
+  if (!native || typeof native.saveBegin !== 'function') return;
+  const notify = (msg) => (typeof window.__toast === 'function' ? window.__toast(msg) : console.log('[XEDITZ]', msg));
+  const readBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('gagal membaca data'));
+    reader.readAsDataURL(blob);
+  });
+  const check = (res, fallback) => {
+    if (!String(res).startsWith('OK')) throw new Error(String(res).split('|')[1] || fallback);
+  };
+  let saving = false;
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest && e.target.closest('a[download]');
+    if (!link || !link.href) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (saving) return;
+    saving = true;
+    const name = link.getAttribute('download') || 'xeditz.mp4';
+    try {
+      notify('Menyimpan video ke perangkat...');
+      const blob = await (await fetch(link.href)).blob();
+      check(native.saveBegin(name, blob.type || 'video/mp4'), 'gagal memulai penyimpanan');
+      const CHUNK = 3 * 256 * 1024; // kelipatan 3 byte: base64 tiap potongan berdiri sendiri
+      for (let off = 0; off < blob.size; off += CHUNK) {
+        check(native.saveChunk(await readBase64(blob.slice(off, off + CHUNK))), 'gagal menulis berkas');
+      }
+      check(native.saveEnd(), 'gagal menyelesaikan berkas');
+    } catch (err) {
+      try { native.saveAbort(); } catch (ignore) { /* sudah tertutup */ }
+      console.error('[XEDITZ] simpan gagal:', err);
+      notify('Gagal menyimpan video: ' + err.message);
+    } finally {
+      saving = false;
+    }
+  }, true);
+})();
+
 // Catat musik yang dipasang lewat #impPhoto (Audio Hub / musik bawaan) supaya bisa dipasang ulang
 // setelah preset dimuat ulang (mis. saat menerapkan edit teks). Hanya referensi di memori.
 document.addEventListener('change', (e) => {
@@ -1374,6 +1417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('is-visible'), 4200);
   };
+  window.__toast = toast;
 
   const setWelcomeStatus = (kind, title, desc) => {
     if (!wStatus) return;
@@ -1529,6 +1573,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+
+  // Tombol Back Android (dipanggil MainActivity.onBackPressed): true = sudah ditangani halaman.
+  window.__androidBack = () => {
+    if (exportModal && exportModal.open) { exportModal.close(); return true; }
+    const framing = byId('framingModal');
+    if (framing && framing.style.display === 'flex') { byId('btnFramingClose')?.click(); return true; }
+    if (homeScreen && !homeScreen.hidden) return false;   // di beranda: keluar aplikasi
+    btnBackToHome?.click();                               // dari pilih sumber / editor: kembali ke beranda
+    return true;
+  };
   wPaste?.addEventListener('click', async () => {
     try {
       const text = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : '';

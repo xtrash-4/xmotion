@@ -18,3 +18,7 @@ scratch/
 .claude/
 screenshot_*.png
 test_*.png
+
+# Media preset (mp4) harus ikut masuk image Docker
+!web/runtime/media/**/*.mp4
+!web/preset/*.mp4

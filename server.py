@@ -620,25 +620,9 @@ async def get_package_media(package_id: str, filename: str):
     except Exception as e:
         print(f"[get_package_media] Unduh remote {filename} gagal: {e}")
 
-    # Fallback visual jika file media tidak disertakan di cloud Alight Motion
-    ext = os.path.splitext(filename)[1].lower()
-    if ext in ('.jpg', '.jpeg', '.png', '.webp') or filename.startswith('null') or not ext:
-        fallback_candidates = [
-            os.path.join(UPLOADS_DIR, "foto1.jpg"),
-            os.path.join(BASE_DIR, "foto1.jpg"),
-            os.path.join(WEB_DIR, "preset", "1000877273..webp")
-        ]
-        for fb in fallback_candidates:
-            if os.path.exists(fb) and os.path.getsize(fb) > 0:
-                print(f"[get_package_media] Menyajikan fallback gambar untuk: {filename}")
-                return FileResponse(fb)
-    
-    if ext in ('.mp4', '.mp3', '.m4a', '.wav'):
-        fallback_audio = os.path.join(BASE_DIR, "audio.m4a")
-        if os.path.exists(fallback_audio):
-            print(f"[get_package_media] Menyajikan fallback audio untuk: {filename}")
-            return FileResponse(fallback_audio)
-
+    # Media tidak ada & tidak bisa diunduh: balas 404 yang jujur. Sebelumnya server menyajikan berkas
+    # PENGGANTI (foto1.jpg / audio.m4a) dengan status 200, sehingga foto, video, dan musik link tidak sesuai aslinya.
+    print(f"[get_package_media] media tidak tersedia: {package_id}/{filename}")
     return JSONResponse({"error": "Media not found"}, status_code=404)
 
 def run_render_task(foto1_name: str, foto2_name: str, foto3_name: str = None, crop_configs: dict = None, preset: str = "1"):
