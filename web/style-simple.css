@@ -209,7 +209,14 @@ svg.i, .i {
 
 .status-bar,
 .gesture-bar {
-  display: none;
+  display: none !important;
+}
+
+.sb-ic {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
 }
 
 /* ────────── TAMPILAN BINGKAI HP ANDROID DI LAPTOP / DESKTOP (COLORFUL Y2K) ────────── */
@@ -258,7 +265,7 @@ svg.i, .i {
 }
 
 .frame-mode .status-bar {
-  display: flex;
+  display: flex !important;
   position: relative;
   height: 32px;
   align-items: center;
