@@ -116,6 +116,17 @@ window.__API_BASE = localStorage.getItem('XPREST_API_BASE') || (location.protoco
   window.fetch = async function (input, init) {
     let reqUrl = typeof input === 'string' ? input : (input && input.url) || '';
     
+    // Normalisasi preset path agar selalu valid di WebView Android (file://) maupun web browser
+    if (typeof reqUrl === 'string') {
+      if (reqUrl.startsWith('../preset/')) {
+        reqUrl = './preset/' + reqUrl.slice(10);
+        input = reqUrl;
+      } else if (reqUrl.includes('/android_asset/preset/')) {
+        reqUrl = reqUrl.replace('/android_asset/preset/', '/android_asset/web/preset/');
+        input = reqUrl;
+      }
+    }
+
     // Jika diakses dari APK Android (file://) atau API_BASE telah diset, arahkan endpoint /api/ ke server online
     if (window.__API_BASE && reqUrl.startsWith('/api/')) {
       reqUrl = window.__API_BASE.replace(/\/+$/, '') + reqUrl;
@@ -234,16 +245,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadInitialDefaultPreset() {
     if (window.__presetLoaded || window.__cancelAutoLoad) return;
+    if (typeof engineHasPreset === 'function' && engineHasPreset()) {
+      window.__presetLoaded = true;
+      return;
+    }
     const impState = document.getElementById('impState');
     if (impState) impState.textContent = 'Menyiapkan editor...';
 
     try {
-      if (window.__cancelAutoLoad) return;
+      // Tunggu sampai WebGL engine (window.AM) selesai inisialisasi canvas
+      if (window.AM && typeof window.AM.waitReady === 'function') {
+        try {
+          await window.AM.waitReady(10000);
+        } catch (wErr) {
+          console.warn('[AutoLoad] waitReady timeout/skip:', wErr);
+        }
+      }
+      if (window.__cancelAutoLoad || (typeof engineHasPreset === 'function' && engineHasPreset())) {
+        window.__presetLoaded = true;
+        return;
+      }
+
       const xmlResp = await fetch('./runtime/presets/Beraksi.xml');
       if (!xmlResp.ok || window.__cancelAutoLoad) return;
       const xmlText = await xmlResp.text();
 
-      if (window.__cancelAutoLoad) return;
+      if (window.__cancelAutoLoad || (typeof engineHasPreset === 'function' && engineHasPreset())) {
+        window.__presetLoaded = true;
+        return;
+      }
       const xmlFile = new File([xmlText], 'Beraksi.xml', { type: 'text/xml' });
       const dt = new DataTransfer();
       dt.items.add(xmlFile);
@@ -1530,10 +1560,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { capture: true, once: true });
   });
 
-  const engineHasPreset = () => {
+  function engineHasPreset() {
     const total = (document.getElementById('timeLabel')?.textContent || '').split('/')[1] || '';
     return parseFloat(total) > 0; // "0.00s / 18.48s" -> ada preset; "0.00s / 0.00s" -> kosong
-  };
+  }
 
   const checkAndAutoLoad = () => {
     if (window.__presetLoaded || window.__cancelAutoLoad) return;
