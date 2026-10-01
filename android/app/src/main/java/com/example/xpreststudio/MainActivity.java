@@ -94,12 +94,15 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(false);
+        settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
         settings.setUserAgentString(settings.getUserAgentString() + " XPrestApp/2.0");
 
         webAppInterface = new WebAppInterface(this);
@@ -131,9 +134,10 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (url != null && url.startsWith("https://" + APP_HOST)) {
+                if (url != null && (url.startsWith("https://" + APP_HOST) || url.startsWith("http://" + APP_HOST))) {
                     hideLoading();
                 }
+                injectAndroidBridge();
             }
 
             @Override
@@ -236,6 +240,65 @@ public class MainActivity extends Activity {
     private void loadApp() {
         showLoading("Menghubungkan ke server...");
         webView.loadUrl(APP_URL);
+    }
+
+    private void injectAndroidBridge() {
+        if (webView == null) return;
+        String js = "(function(){"
+                + "if(window.__androidBridgeInjected) return;"
+                + "window.__androidBridgeInjected = true;"
+                + "const native = window.AndroidNative;"
+                + "if(!native || typeof native.saveBegin !== 'function') return;"
+                + "const notify = (msg) => (typeof window.__toast === 'function' ? window.__toast(msg) : console.log('[XEDITZ]', msg));"
+                + "const readBase64 = (blob) => new Promise((resolve, reject) => {"
+                + "  const reader = new FileReader();"
+                + "  reader.onload = () => resolve(String(reader.result).split(',')[1] || '');"
+                + "  reader.onerror = () => reject(reader.error || new Error('gagal membaca data'));"
+                + "  reader.readAsDataURL(blob);"
+                + "});"
+                + "const check = (res, fallback) => {"
+                + "  if (!String(res).startsWith('OK')) throw new Error(String(res).split('|')[1] || fallback);"
+                + "};"
+                + "let saving = false;"
+                + "document.addEventListener('click', async (e) => {"
+                + "  const link = e.target.closest && e.target.closest('a[download]');"
+                + "  if (!link || !link.href) return;"
+                + "  e.preventDefault();"
+                + "  e.stopImmediatePropagation();"
+                + "  if (saving) return;"
+                + "  saving = true;"
+                + "  const name = link.getAttribute('download') || 'xeditz.mp4';"
+                + "  try {"
+                + "    notify('Menyimpan video ke perangkat...');"
+                + "    const blob = await (await fetch(link.href)).blob();"
+                + "    check(native.saveBegin(name, blob.type || 'video/mp4'), 'gagal memulai penyimpanan');"
+                + "    const CHUNK = 3 * 256 * 1024;"
+                + "    for (let off = 0; off < blob.size; off += CHUNK) {"
+                + "      check(native.saveChunk(await readBase64(blob.slice(off, off + CHUNK))), 'gagal menulis berkas');"
+                + "    }"
+                + "    check(native.saveEnd(), 'gagal menyelesaikan berkas');"
+                + "  } catch (err) {"
+                + "    try { native.saveAbort(); } catch (ignore) {}"
+                + "    console.error('[XEDITZ] simpan gagal:', err);"
+                + "    notify('Gagal menyimpan video: ' + err.message);"
+                + "  } finally {"
+                + "    saving = false;"
+                + "  }"
+                + "}, true);"
+                + "if(!window.__androidBack) {"
+                + "  window.__androidBack = () => {"
+                + "    const exportModal = document.getElementById('exportModal');"
+                + "    if (exportModal && exportModal.open) { exportModal.close(); return true; }"
+                + "    const framing = document.getElementById('framingModal');"
+                + "    if (framing && framing.style.display === 'flex') { document.getElementById('btnFramingClose')?.click(); return true; }"
+                + "    const homeScreen = document.getElementById('homeScreen');"
+                + "    if (homeScreen && !homeScreen.hidden) return false;"
+                + "    document.getElementById('btnBackToHome')?.click();"
+                + "    return true;"
+                + "  };"
+                + "}"
+                + "})();";
+        webView.evaluateJavascript(js, null);
     }
 
     private static String escapeHtml(String s) {
