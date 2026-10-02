@@ -213,7 +213,7 @@ async def get_tiktok_audio(url: str):
     try:
         out_name = f"tiktok_{uuid.uuid4().hex[:8]}"
         dest_tpl = os.path.join(UPLOADS_DIR, f"{out_name}.%(ext)s")
-        cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", dest_tpl, url]
+        cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2 -b:a 192k", "-o", dest_tpl, url]
         res = subprocess.run(cmd, capture_output=True, timeout=30)
         final_file = os.path.join(UPLOADS_DIR, f"{out_name}.mp3")
         if os.path.exists(final_file):
@@ -237,7 +237,7 @@ async def extract_audio_api(video: UploadFile = File(...)):
         out_path = os.path.join(UPLOADS_DIR, out_name)
         with open(temp_vid, "wb") as buffer:
             shutil.copyfileobj(video.file, buffer)
-        cmd = ["ffmpeg", "-y", "-i", temp_vid, "-vn", "-acodec", "libmp3lame", "-q:a", "2", out_path]
+        cmd = ["ffmpeg", "-y", "-i", temp_vid, "-vn", "-c:a", "libmp3lame", "-ar", "44100", "-ac", "2", "-b:a", "192k", out_path]
         subprocess.run(cmd, capture_output=True)
         if os.path.exists(temp_vid):
             os.remove(temp_vid)
@@ -861,9 +861,9 @@ async def get_project_xml(url: str, project: str = None):
     err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
 
 
-    print(f"[project-xml] Semua metode gagal untuk {url}: direct={e_direct}, remote={remote_error}")
+    print(f"[project-xml] Semua metode gagal untuk {url}: direct={direct_error}, remote={remote_error}")
     return JSONResponse({
-        "error": f"{err_title_str} tidak dapat diunduh dari cloud ({e_direct}). Pastikan link share masih aktif di aplikasi Alight Motion, atau gunakan link Google Drive XML.",
+        "error": f"{err_title_str} tidak dapat diunduh dari cloud ({direct_error}). Pastikan link share masih aktif di aplikasi Alight Motion, atau gunakan link Google Drive XML.",
         "meta": am_meta
     }, status_code=400)
 

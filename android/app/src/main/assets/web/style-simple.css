@@ -821,6 +821,77 @@ svg.i, .i {
   width: 100%;
 }
 
+/* Beat Markers on Scrubber Timeline */
+.beat-bookmark-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.beat-dot {
+  position: absolute;
+  top: 50%;
+  width: 3.5px;
+  height: 9px;
+  background: #facc15;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.9), 0 0 1px #000;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+/* Quick Audio Nudge Buttons */
+.nudge-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.btn-nudge {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  user-select: none;
+}
+
+.btn-nudge:hover {
+  background: rgba(51, 65, 85, 0.95);
+  color: #fff;
+  border-color: rgba(34, 197, 94, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-nudge:active {
+  transform: translateY(1px);
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.btn-nudge-reset {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.btn-nudge-reset:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #fff;
+}
+
 #seek,
 input[type="range"] {
   -webkit-appearance: none;

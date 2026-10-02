@@ -209,6 +209,7 @@ document.addEventListener('change', async (e) => {
     }
   }
   registerXmlMediaUsage(texts, Array.from(input.files).map((f) => f.name));
+  if (texts && texts[0]) renderTimelineBeatBookmarks(texts[0]);
   input.files = out.files;
   input.__xmlFixed = true;
   try { input.dispatchEvent(new Event('change', { bubbles: true })); } finally { input.__xmlFixed = false; }
@@ -327,6 +328,7 @@ async function applyEngineAudio(audioFileOrBlob, displayName) {
 
   if (!audioFileOrBlob) {
     window.__customAudio = null;
+    window.__isCustomAudio = false;
     if (audioLabel) audioLabel.textContent = '+ Pilih Lagu';
     try {
       const silent = createSilentAudioFile();
@@ -341,6 +343,7 @@ async function applyEngineAudio(audioFileOrBlob, displayName) {
   }
 
   window.__customAudio = audioFileOrBlob;
+  window.__isCustomAudio = true;
   const resolvedName = displayName || audioFileOrBlob.name || 'Musik Preset';
 
   // 1. Update UI label CapCut di header jika ada
@@ -363,6 +366,48 @@ async function applyEngineAudio(audioFileOrBlob, displayName) {
   return null;
 }
 window.__applyEngineAudio = applyEngineAudio;
+
+// Render titik-titik penanda ketukan Alight Motion (<bookmark t="..." />) di garis scrubber timeline
+function renderTimelineBeatBookmarks(xmlText) {
+  const track = document.getElementById('beatBookmarkTrack');
+  if (!track) return;
+  track.innerHTML = '';
+  if (!xmlText || typeof xmlText !== 'string') return;
+
+  let totalMs = 0;
+  const totalMatch = xmlText.match(/totalTime=["'](\d+)["']/i);
+  if (totalMatch) {
+    totalMs = parseFloat(totalMatch[1]);
+  }
+  if (!totalMs && window.AM && typeof window.AM.getDuration === 'function') {
+    totalMs = window.AM.getDuration() * 1000;
+  }
+  if (!totalMs || totalMs <= 0) return;
+
+  const bRegex = /<bookmark\s+t=["'](\d+)["']/g;
+  let m;
+  const bookmarks = [];
+  while ((m = bRegex.exec(xmlText)) !== null) {
+    bookmarks.push(parseFloat(m[1]));
+  }
+
+  if (!bookmarks.length) return;
+
+  const frag = document.createDocumentFragment();
+  bookmarks.forEach((t) => {
+    if (t >= 0 && t <= totalMs) {
+      const pct = (t / totalMs) * 100;
+      const dot = document.createElement('div');
+      dot.className = 'beat-dot';
+      dot.style.left = `${pct}%`;
+      dot.title = `Ketukan Beat: ${(t / 1000).toFixed(2)}s`;
+      frag.appendChild(dot);
+    }
+  });
+  track.appendChild(frag);
+  console.log(`[XEDITZ Timeline] Rendered ${bookmarks.length} beat bookmarks on timeline.`);
+}
+window.__renderTimelineBeatBookmarks = renderTimelineBeatBookmarks;
 
 
 // Listener change tangkap jika ada file audio yang disuntikkan ke #impPhoto
@@ -426,6 +471,31 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => activateStudioTab('media'), 250);
   setTimeout(() => activateStudioTab('media'), 600);
 
+  // Listener Tombol Quick Nudge Offset Ketukan (+/-50ms, +/-100ms, Reset 0ms)
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.btn-nudge');
+    if (!btn) return;
+    const nudgeVal = parseInt(btn.getAttribute('data-nudge'), 10);
+    const offsetInput = document.getElementById('offset');
+    const offsetLabel = document.getElementById('offsetLabel');
+    if (!offsetInput) return;
+
+    let currentVal = parseInt(offsetInput.value, 10) || 0;
+    if (nudgeVal === 0) {
+      currentVal = 0;
+    } else {
+      currentVal += nudgeVal;
+    }
+    const min = parseInt(offsetInput.min, 10) || -3000;
+    const max = parseInt(offsetInput.max, 10) || 3000;
+    currentVal = Math.max(min, Math.min(max, currentVal));
+
+    offsetInput.value = currentVal;
+    if (offsetLabel) offsetLabel.textContent = `${currentVal} ms`;
+    offsetInput.dispatchEvent(new Event('input', { bubbles: true }));
+    offsetInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
 
   // 2. FUNGSI PEMUATAN PRESET DEFAULT DI AWAL (Tanpa Perlu Klik Kartu Template)
   let autoLoadTimer = null;
@@ -470,6 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (impXml && !window.__cancelAutoLoad) {
         impXml.files = dt.files;
         impXml.dispatchEvent(new Event('change', { bubbles: true }));
+        renderTimelineBeatBookmarks(xmlText);
       }
 
       setTimeout(async () => {
@@ -1059,6 +1130,12 @@ document.addEventListener('DOMContentLoaded', () => {
           tidySlots();
         } else if (typeof window.__tidySlots === 'function') {
           window.__tidySlots();
+        }
+
+        // Daftarkan XML preset aktif agar layer teks dan fill media terbaca ke editor
+        if (data.xml) {
+          registerXmlMediaUsage([data.xml], [projectTitle || 'preset.xml']);
+          renderTimelineBeatBookmarks(data.xml);
         }
 
         // Trigger render WebGL ke frame awal agar tampilan kanvas langsung berganti foto baru
@@ -1735,6 +1812,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateExportResolutionOptions('original');
     showTextState('');
     renderTexts();
+    if (window.__amBase && window.__amBase[0] && window.__amBase[0].xml) {
+      renderTimelineBeatBookmarks(window.__amBase[0].xml);
+    }
     setTimeout(tidySlots, 0);
   };
   renderTexts();

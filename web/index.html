@@ -140,8 +140,9 @@
 
       <!-- Compact Player Transport Controls (Y2K Chrome Style) -->
       <div class="player-controls" id="transport">
-        <!-- Single-line Time Scrubber -->
+        <!-- Single-line Time Scrubber with Beat Markers -->
         <div class="scrubber-bar">
+          <div id="beatBookmarkTrack" class="beat-bookmark-track" aria-hidden="true"></div>
           <input type="range" id="seek" min="0" max="10000" value="0" step="1" aria-label="Posisi Timeline">
           <button id="seekReset" class="btn-icon-subtle" type="button" title="Kembali ke awal" style="display:none;"></button>
         </div>
@@ -485,6 +486,13 @@
                 <span class="field-val" id="offsetLabel">0 ms</span>
               </div>
               <input type="range" id="offset" min="-3000" max="3000" step="10" value="0">
+              <div class="nudge-btn-row">
+                <button type="button" class="btn-nudge" data-nudge="-100" title="Mundurkan 100 milidetik">-100ms</button>
+                <button type="button" class="btn-nudge" data-nudge="-50" title="Mundurkan 50 milidetik">-50ms</button>
+                <button type="button" class="btn-nudge btn-nudge-reset" data-nudge="0" title="Kembali ke 0">0ms</button>
+                <button type="button" class="btn-nudge" data-nudge="50" title="Majukan 50 milidetik">+50ms</button>
+                <button type="button" class="btn-nudge" data-nudge="100" title="Majukan 100 milidetik">+100ms</button>
+              </div>
             </div>
 
             <div class="control-field" style="margin-top: 12px;">
