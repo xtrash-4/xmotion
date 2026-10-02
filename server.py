@@ -330,8 +330,123 @@ def _rebuild_from_local_files(package_id: str, url: str):
         "projects": [{"name": fname, "title": title, "characters": len(text)}],
     }
 
+def _has_audio_track(file_path: str) -> bool:
+    """Periksa apakah berkas media memiliki track audio stream (ffprobe)."""
+    if not file_path or not os.path.exists(file_path):
+        return True
+    lower = file_path.lower()
+    if any(lower.endswith(ext) for ext in ('.mp3', '.m4a', '.wav', '.aac', '.ogg', '.opus', '.flac')):
+        return True
+    try:
+        cmd = ['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1', file_path]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        return bool(res.stdout.strip())
+    except Exception:
+        return True
+
+def _extract_media_map_and_audio(xml_text: str, media_list: list, local_media_dir: str = None):
+    """
+    Analisis deklarasi XML Alight Motion dan daftar media:
+    1. Bangun kamus pemetaan URI -> nama berkas fisik di ZIP.
+    2. Deteksi audio preset secara akurat (termasuk soundtrack AAC di dalam berkas container video .mp4).
+    """
+    media_map = {}
+    if not xml_text:
+        return media_map, None, False, False
+
+    for m in re.finditer(r'<media\s+([^>]+)/?>', xml_text, re.IGNORECASE):
+        attrs = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', m.group(1)))
+        uri = attrs.get('uri', '')
+        fn = attrs.get('filename', '')
+        title = attrs.get('title', '')
+        label = attrs.get('label', '')
+        target_fn = fn or title or label
+        if uri and target_fn:
+            media_map[uri] = target_fn
+            clean_uri = re.sub(r'^(amproj:|am:)', '', uri)
+            media_map[clean_uri] = target_fn
+            base_clean = clean_uri.split('/')[-1]
+            media_map[base_clean] = target_fn
+            try:
+                dec = urllib.parse.unquote(clean_uri)
+                media_map[dec] = target_fn
+                media_map[dec.split('/')[-1]] = target_fn
+            except Exception:
+                pass
+
+    has_audio_tag = bool(re.search(r'<audio\s', xml_text, re.IGNORECASE))
+    found_audio_item = None
+
+    if has_audio_tag:
+        m_audio = re.search(r'<audio\s+([^>]+)/?>', xml_text, re.IGNORECASE)
+        audio_src = ""
+        audio_label = ""
+        if m_audio:
+            attrs = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', m_audio.group(1)))
+            audio_src = attrs.get('src', '')
+            audio_label = attrs.get('label', '')
+
+        clean_src = re.sub(r'^(amproj:|am:)', '', audio_src).split('/')[-1]
+        try:
+            dec_src = urllib.parse.unquote(clean_src)
+        except Exception:
+            dec_src = clean_src
+
+        # Prioritas 1: Kecocokan langsung src ke nama berkas
+        if clean_src:
+            for m in media_list:
+                m_name = m.get('name', '')
+                if m_name == clean_src or m_name.lower() == clean_src.lower() or m_name == dec_src or m_name.lower() == dec_src.lower():
+                    found_audio_item = m
+                    break
+
+        # Prioritas 2: Kecocokan via mediaMap
+        if not found_audio_item and audio_src:
+            mapped_fn = media_map.get(audio_src) or media_map.get(clean_src) or media_map.get(dec_src)
+            if mapped_fn:
+                for m in media_list:
+                    m_name = m.get('name', '')
+                    if m_name == mapped_fn or m_name.lower() == mapped_fn.lower():
+                        found_audio_item = m
+                        break
+
+        # Prioritas 3: Kecocokan via label di tag <audio>
+        if not found_audio_item and audio_label:
+            cl = audio_label.strip().lower()
+            for m in media_list:
+                m_name = m.get('name', '').lower()
+                if m_name == cl or cl in m_name or m_name in cl:
+                    found_audio_item = m
+                    break
+
+        # Prioritas 4: File audio murni (.mp3, .m4a, .wav, .aac, .ogg)
+        if not found_audio_item:
+            for m in media_list:
+                m_name = m.get('name', '').lower()
+                mime = m.get('mime', '').lower()
+                if mime.startswith('audio/') or any(m_name.endswith(ext) for ext in ('.mp3', '.m4a', '.wav', '.aac', '.ogg')):
+                    found_audio_item = m
+                    break
+
+        # Prioritas 5: Berkas container video (.mp4, .mov) yang memiliki audio stream
+        if not found_audio_item:
+            for m in media_list:
+                m_name = m.get('name', '')
+                if m_name.lower().endswith(('.mp4', '.mov', '.m4v')):
+                    if local_media_dir:
+                        fp = os.path.join(local_media_dir, m_name)
+                        if not _has_audio_track(fp):
+                            continue
+                    found_audio_item = m
+                    break
+
+    has_audio_file = bool(found_audio_item)
+    missing_cloud_audio = has_audio_tag and not has_audio_file
+
+    return media_map, found_audio_item, has_audio_file, missing_cloud_audio
+
 def _offline_response(url: str, project: str):
-    """Hanya kembalikan data jika ada cache JSON paket yang valid. Jangan asal tebak dari file lokal sembarang."""
+    """Hanya kembalikan data jika ada cache JSON paket yang valid."""
     package_id = _package_id_from_url(url)
     if not package_id:
         return None
@@ -341,31 +456,18 @@ def _offline_response(url: str, project: str):
                 data = json.load(open(path, encoding="utf-8"))
                 data["offline"] = True
                 xml_text = data.get("xml", "")
-                data["hasAudio"] = ("<audio" in xml_text)
-
                 media_list = data.get("media", [])
-                m_audio = re.search(r'<audio\s[^>]*?src=["\'](?:amproj:)?([^"\']+)["\']', xml_text, re.IGNORECASE)
-                xml_audio_fn = m_audio.group(1).split('/')[-1] if m_audio else None
+                local_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
 
-                has_audio_file = False
-                found_audio_item = None
-                if xml_audio_fn:
-                    for m in media_list:
-                        if m.get("name") == xml_audio_fn or (m.get("name") and m["name"].endswith(xml_audio_fn)):
-                            has_audio_file = True
-                            found_audio_item = m
-                            break
-                if not has_audio_file:
-                    for m in media_list:
-                        if m.get("mime", "").startswith("audio/") or any((m.get("name") or "").lower().endswith(ext) for ext in [".mp3", ".m4a", ".wav", ".aac"]):
-                            has_audio_file = True
-                            found_audio_item = m
-                            break
+                media_map, audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
+                    xml_text, media_list, local_media_dir=local_dir
+                )
 
+                data["mediaMap"] = media_map
+                data["audioItem"] = audio_item
+                data["hasAudio"] = ("<audio" in xml_text)
                 data["hasAudioFile"] = has_audio_file
-                data["missingCloudAudio"] = ("<audio" in xml_text) and not has_audio_file
-                if found_audio_item and not data.get("audioItem"):
-                    data["audioItem"] = found_audio_item
+                data["missingCloudAudio"] = missing_cloud_audio
                 return data
             except (OSError, ValueError):
                 pass
@@ -577,27 +679,10 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
                 "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
             })
 
-        # Cek apakah berkas audio benar-benar disertakan di dalam paket
-        m_audio = re.search(r'<audio\s[^>]*?src=["\'](?:amproj:)?([^"\']+)["\']', xml_text, re.IGNORECASE)
-        xml_audio_fn = m_audio.group(1).split('/')[-1] if m_audio else None
-        
-        has_audio_file = False
-        found_audio_item = None
-        if xml_audio_fn:
-            for m in media_list:
-                if m["name"] == xml_audio_fn or m["name"].endswith(xml_audio_fn) or xml_audio_fn in m["name"]:
-                    has_audio_file = True
-                    found_audio_item = m
-                    break
-        if not has_audio_file:
-            for m in media_list:
-                if m.get("mime", "").startswith("audio/") or any(m["name"].lower().endswith(ext) for ext in [".mp3", ".m4a", ".wav", ".aac", ".ogg"]):
-                    has_audio_file = True
-                    found_audio_item = m
-                    break
-
-        missing_cloud_audio = ("<audio" in xml_text) and not has_audio_file
-
+        # Ekstrak mediaMap dan deteksi audio secara komprehensif
+        media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
+            xml_text, media_list, local_media_dir=media_dir
+        )
 
     result = {
         "url": clean_url,
@@ -605,6 +690,7 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
         "xmlName": xml_name,
         "packageId": package_id,
         "media": media_list,
+        "mediaMap": media_map,
         "hasAudio": ("<audio" in xml_text),
         "hasAudioFile": has_audio_file,
         "missingCloudAudio": missing_cloud_audio,

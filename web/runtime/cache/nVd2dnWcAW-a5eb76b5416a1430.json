@@ -40,5 +40,20 @@
       "title": "#702",
       "characters": 85195
     }
-  ]
+  ],
+  "mediaMap": {
+    "amproj:93b3b45a5e52c3c5900359029acd444f.mp4": "93b3b45a5e52c3c5900359029acd444f.mp4",
+    "93b3b45a5e52c3c5900359029acd444f.mp4": "93b3b45a5e52c3c5900359029acd444f.mp4",
+    "amproj:IMG_20260928_205522_224.webp": "IMG_20260928_205522_224.webp",
+    "IMG_20260928_205522_224.webp": "IMG_20260928_205522_224.webp"
+  },
+  "audioItem": {
+    "name": "93b3b45a5e52c3c5900359029acd444f.mp4",
+    "size": 2660631,
+    "mime": "video/mp4",
+    "url": "/api/link/nVd2dnWcAW-a5eb76b5416a1430/media/93b3b45a5e52c3c5900359029acd444f.mp4"
+  },
+  "hasAudio": true,
+  "hasAudioFile": true,
+  "missingCloudAudio": false
 }

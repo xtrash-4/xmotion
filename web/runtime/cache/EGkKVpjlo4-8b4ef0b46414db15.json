@@ -40,5 +40,24 @@
       "title": "#696",
       "characters": 64976
     }
-  ]
+  ],
+  "mediaMap": {
+    "amproj:c4dec6da7a416f39d47d8bbf43c38e80.mp4": "c4dec6da7a416f39d47d8bbf43c38e80.mp4",
+    "c4dec6da7a416f39d47d8bbf43c38e80.mp4": "c4dec6da7a416f39d47d8bbf43c38e80.mp4",
+    "amproj:IMG_20260923_192420_830.webp": "IMG_20260923_192420_830.webp",
+    "IMG_20260923_192420_830.webp": "IMG_20260923_192420_830.webp",
+    "amproj:IMG_20260923_192359_925.webp": "IMG_20260923_192359_925.webp",
+    "IMG_20260923_192359_925.webp": "IMG_20260923_192359_925.webp",
+    "amproj:IMG_20260923_192412_297.webp": "IMG_20260923_192412_297.webp",
+    "IMG_20260923_192412_297.webp": "IMG_20260923_192412_297.webp"
+  },
+  "audioItem": {
+    "name": "c4dec6da7a416f39d47d8bbf43c38e80.mp4",
+    "size": 3638848,
+    "mime": "video/mp4",
+    "url": "/api/link/EGkKVpjlo4-8b4ef0b46414db15/media/c4dec6da7a416f39d47d8bbf43c38e80.mp4"
+  },
+  "hasAudio": true,
+  "hasAudioFile": true,
+  "missingCloudAudio": false
 }

@@ -46,5 +46,20 @@
       "title": "buset 🔥 1:1",
       "characters": 96439
     }
-  ]
+  ],
+  "mediaMap": {
+    "amproj:eh buset.mp3": "eh buset.mp3",
+    "eh buset.mp3": "eh buset.mp3",
+    "amproj:Snaptik.app_7273362538077621509.mp4": "Snaptik.app_7273362538077621509.mp4",
+    "Snaptik.app_7273362538077621509.mp4": "Snaptik.app_7273362538077621509.mp4"
+  },
+  "audioItem": {
+    "name": "eh buset.mp3",
+    "size": 206851,
+    "mime": "audio/mpeg",
+    "url": "/api/link/GKD5Vjdb8d-a7db2a115eb4ca7a/media/eh buset.mp3"
+  },
+  "hasAudio": true,
+  "hasAudioFile": true,
+  "missingCloudAudio": false
 }

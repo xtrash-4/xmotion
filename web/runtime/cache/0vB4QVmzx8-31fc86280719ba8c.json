@@ -58,5 +58,24 @@
       "title": "Body Pata - Pata | @fvanthashoda",
       "characters": 187955
     }
-  ]
+  ],
+  "mediaMap": {
+    "amproj:Profil Copy 3 Copy 3 [3C65A93].png": "Profil Copy 3 Copy 3 [3C65A93].png",
+    "Profil Copy 3 Copy 3 [3C65A93].png": "Profil Copy 3 Copy 3 [3C65A93].png",
+    "amproj:New Element 119 [0D65909].png": "New Element 119 [0D65909].png",
+    "New Element 119 [0D65909].png": "New Element 119 [0D65909].png",
+    "amproj:New Element 146 [A636D1A].png": "New Element 146 [A636D1A].png",
+    "New Element 146 [A636D1A].png": "New Element 146 [A636D1A].png",
+    "amproj:5e0b9ac5878b7804a25fe26e7d45e1d0.jpg": "5e0b9ac5878b7804a25fe26e7d45e1d0.jpg",
+    "5e0b9ac5878b7804a25fe26e7d45e1d0.jpg": "5e0b9ac5878b7804a25fe26e7d45e1d0.jpg"
+  },
+  "audioItem": {
+    "name": "0143FC455AC138E91D1DD1AD47535F92296445C6.mp4",
+    "size": 26921418,
+    "mime": "video/mp4",
+    "url": "/api/link/0vB4QVmzx8-31fc86280719ba8c/media/0143FC455AC138E91D1DD1AD47535F92296445C6.mp4"
+  },
+  "hasAudio": true,
+  "hasAudioFile": true,
+  "missingCloudAudio": false
 }

@@ -77,6 +77,31 @@ window.__textEdits = {};     // edit teks yang dipilih pengguna: { "dokumen:urut
 window.__slotPicked = {};    // slotId -> nama file yang dipilih pengguna (untuk label)
 window.__slotFiles = {};     // slotId -> File yang dipilih (hanya di memori, dipasang ulang setelah reload preset)
 window.__customAudio = null; // musik pilihan pengguna (hanya di memori)
+function isFillMatch(fills, id) {
+  if (!fills || !id) return true;
+  if (fills.has(id)) return true;
+  const cleanId = id.replace(/^(amproj:|am:)/, '');
+  if (fills.has(cleanId) || fills.has('amproj:' + cleanId) || fills.has('am:' + cleanId)) return true;
+  let dec = cleanId;
+  try { dec = decodeURIComponent(cleanId); } catch (_) {}
+  if (fills.has(dec) || fills.has('amproj:' + dec) || fills.has('am:' + dec)) return true;
+  const baseClean = cleanId.split('/').pop();
+  let baseDec = baseClean;
+  try { baseDec = decodeURIComponent(baseClean); } catch (_) {}
+  if (fills.has(baseClean) || fills.has(baseDec)) return true;
+  for (const f of fills) {
+    const cf = f.replace(/^(amproj:|am:)/, '');
+    let df = cf;
+    try { df = decodeURIComponent(cf); } catch (_) {}
+    if (cf === cleanId || df === dec || cf === baseClean || df === baseDec ||
+        cf.toLowerCase() === cleanId.toLowerCase() || df.toLowerCase() === dec.toLowerCase() ||
+        cf.toLowerCase() === baseClean.toLowerCase() || df.toLowerCase() === baseDec.toLowerCase()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function registerXmlMediaUsage(xmlTexts, names) {
   try {
     const fills = new Set();
@@ -88,7 +113,18 @@ function registerXmlMediaUsage(xmlTexts, names) {
       hasAny = true;
       base.push({ name: (names && names[i]) || `preset${i + 1}.xml`, xml: text });
       Array.from(doc.getElementsByTagName('*')).forEach((el) => {
-        ['fillImage', 'fillVideo'].forEach((a) => { const v = el.getAttribute(a); if (v) fills.add(v); });
+        ['fillImage', 'fillVideo'].forEach((a) => {
+          const v = el.getAttribute(a);
+          if (v) {
+            fills.add(v);
+            const cv = v.replace(/^(amproj:|am:)/, '');
+            fills.add(cv);
+            try { fills.add(decodeURIComponent(cv)); } catch (_) {}
+            const bv = cv.split('/').pop();
+            fills.add(bv);
+            try { fills.add(decodeURIComponent(bv)); } catch (_) {}
+          }
+        });
       });
     });
     window.__amFillMedia = hasAny ? fills : null;
@@ -787,11 +823,95 @@ document.addEventListener('DOMContentLoaded', () => {
         if (engineReady && window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
           showAmStatus('loading', 'Memasang foto dan aset preset...', projectTitle);
           const currentSlots = window.AM.getMediaSlots();
+
+          // 1. Bangun kamus mediaMap dari XML jika belum ada
+          const mediaMap = data.mediaMap || {};
+          if (Object.keys(mediaMap).length === 0 && typeof data.xml === 'string') {
+            try {
+              const xmlDoc = new DOMParser().parseFromString(data.xml, 'application/xml');
+              const mediaTags = xmlDoc.getElementsByTagName('media');
+              for (let i = 0; i < mediaTags.length; i++) {
+                const mTag = mediaTags[i];
+                const uri = mTag.getAttribute('uri') || '';
+                const fn = mTag.getAttribute('filename') || mTag.getAttribute('title') || mTag.getAttribute('label') || '';
+                if (uri && fn) {
+                  mediaMap[uri] = fn;
+                  const cleanUri = uri.replace(/^(amproj:|am:)/, '');
+                  mediaMap[cleanUri] = fn;
+                  mediaMap[cleanUri.split('/').pop()] = fn;
+                  try {
+                    const dec = decodeURIComponent(cleanUri);
+                    mediaMap[dec] = fn;
+                    mediaMap[dec.split('/').pop()] = fn;
+                  } catch (_) {}
+                }
+              }
+            } catch (_) {}
+          }
+
+          // 2. Kumpulkan seluruh berkas visual (gambar/video) asli yang ada di ZIP paket
+          const visualMedia = mediaList.filter(m => {
+            const name = (m.name || '').toLowerCase();
+            return !name.endsWith('.xml') && !name.endsWith('.txt') &&
+                   !name.endsWith('.mp3') && !name.endsWith('.m4a') && !name.endsWith('.wav') && !name.endsWith('.aac');
+          });
+
           let slotIdx = 0;
           for (const slot of currentSlots) {
             slotIdx++;
-            const cleanId = (slot.id || '').replace(/^amproj:/, '');
-            const matched = mediaList.find(m => m.name === cleanId || m.name === slot.name || (m.name && cleanId.includes(m.name)));
+            const rawId = slot.id || '';
+            const slotName = slot.name || '';
+            const cleanId = rawId.replace(/^(amproj:|am:)/, '');
+            let decodedId = cleanId;
+            try { decodedId = decodeURIComponent(cleanId); } catch (_) {}
+            const baseClean = cleanId.split('/').pop();
+            let baseDecoded = baseClean;
+            try { baseDecoded = decodeURIComponent(baseClean); } catch (_) {}
+
+            // Prioritas 1: Exact / Case-insensitive match langsung ke daftar media
+            let matched = null;
+            for (const m of mediaList) {
+              const mn = m.name || '';
+              let mnDec = mn;
+              try { mnDec = decodeURIComponent(mn); } catch (_) {}
+              const targets = [cleanId, decodedId, baseClean, baseDecoded, slotName];
+              if (targets.some(t => t && (t === mn || t.toLowerCase() === mn.toLowerCase() || t === mnDec || t.toLowerCase() === mnDec.toLowerCase()))) {
+                matched = m;
+                break;
+              }
+            }
+
+            // Prioritas 2: Pencocokan via mediaMap (URI internal Android content:// -> File fisik di ZIP)
+            if (!matched) {
+              const mapped = mediaMap[rawId] || mediaMap[cleanId] || mediaMap[decodedId] || mediaMap[baseClean] || mediaMap[baseDecoded];
+              if (mapped) {
+                for (const m of mediaList) {
+                  const mn = m.name || '';
+                  if (mn === mapped || mn.toLowerCase() === mapped.toLowerCase() || mn.includes(mapped) || mapped.includes(mn)) {
+                    matched = m;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // Prioritas 3: Substring / hash match
+            if (!matched) {
+              for (const m of visualMedia) {
+                const mn = m.name || '';
+                if (mn.length >= 6 && (cleanId.includes(mn) || mn.includes(baseClean) || (slotName && slotName.includes(mn)))) {
+                  matched = m;
+                  break;
+                }
+              }
+            }
+
+            // Prioritas 4: Jika paket memiliki file gambar/video di ZIP, GUNAKAN media asli tersebut!
+            // Jangan biarkan slot tertimpa placeholder buatan jika pembuat preset mengunggah aset media!
+            if (!matched && visualMedia.length > 0) {
+              matched = visualMedia[(slotIdx - 1) % visualMedia.length];
+            }
+
             if (matched && matched.url) {
               try {
                 let fetchUrl = matched.url;
@@ -812,7 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('[Apply Preset Media Warn]', slot.id, mErr);
               }
             } else {
-              // Jika preset tidak memiliki media di cloud, pasang placeholder bersih agar foto preset lama tidak tertahan!
+              // Hanya pasang placeholder jika paket cloud benar-benar 0 berkas media (preset template XML-only)
               try {
                 const placeholder = await createSlotPlaceholder(slotIdx, slot.name || cleanId);
                 await window.AM.applyMedia(slot.id, placeholder);
@@ -826,14 +946,50 @@ document.addEventListener('DOMContentLoaded', () => {
         // 4c. Pasang audio bawaan preset (mendukung file .mp3, .m4a, maupun track sound TikTok .mp4)
         let audioItem = data.audioItem || null;
         if (!audioItem && typeof data.xml === 'string') {
-          const mAudio = data.xml.match(/<audio\s[^>]*?src=["'](?:amproj:)?([^"']+)["']/i);
+          const mediaMap = data.mediaMap || {};
+          const mAudio = data.xml.match(/<audio\s+([^>]+)\/?>/i);
+          let audioSrc = '', audioLabel = '';
           if (mAudio && mAudio[1]) {
-            const rawAudio = mAudio[1].split('/').pop().replace(/^amproj:/, '');
-            audioItem = mediaList.find(m => m.name === rawAudio || (m.name && m.name.endsWith(rawAudio)) || (m.name && rawAudio.includes(m.name)));
+            const srcMatch = mAudio[1].match(/src=["']([^"']+)["']/i);
+            const labelMatch = mAudio[1].match(/label=["']([^"']+)["']/i);
+            if (srcMatch) audioSrc = srcMatch[1];
+            if (labelMatch) audioLabel = labelMatch[1];
           }
-        }
-        if (!audioItem) {
-          audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+
+          const cleanSrc = audioSrc.replace(/^(amproj:|am:)/, '').split('/').pop();
+          let decSrc = cleanSrc;
+          try { decSrc = decodeURIComponent(cleanSrc); } catch (_) {}
+
+          // Prioritas 1: Direct match src
+          if (cleanSrc) {
+            audioItem = mediaList.find(m => {
+              const mn = (m.name || '').toLowerCase();
+              return mn === cleanSrc.toLowerCase() || mn === decSrc.toLowerCase();
+            });
+          }
+          // Prioritas 2: via mediaMap
+          if (!audioItem && audioSrc) {
+            const mapped = mediaMap[audioSrc] || mediaMap[cleanSrc] || mediaMap[decSrc];
+            if (mapped) {
+              audioItem = mediaList.find(m => (m.name || '').toLowerCase() === mapped.toLowerCase());
+            }
+          }
+          // Prioritas 3: via audioLabel
+          if (!audioItem && audioLabel) {
+            const cl = audioLabel.trim().toLowerCase();
+            audioItem = mediaList.find(m => {
+              const mn = (m.name || '').toLowerCase();
+              return mn === cl || cl.includes(mn) || mn.includes(cl);
+            });
+          }
+          // Prioritas 4: File audio murni (.mp3, .m4a, .wav, .aac, .ogg)
+          if (!audioItem) {
+            audioItem = mediaList.find(m => (m.mime && m.mime.startsWith('audio/')) || /\.(mp3|m4a|wav|aac|ogg)$/i.test(m.name || ''));
+          }
+          // Prioritas 5: Berkas container video (.mp4, .mov)
+          if (!audioItem) {
+            audioItem = mediaList.find(m => /\.(mp4|mov|m4v)$/i.test(m.name || ''));
+          }
         }
 
         let audioSuccess = false;
@@ -1031,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
       mediaRows.querySelectorAll('.slot').forEach((row) => {
         const sub = row.querySelector('.slot-sub');
         const id = sub?.getAttribute('title') || '';
-        const hide = !!(fills && id && !fills.has(id));
+        const hide = !!(fills && id && !isFillMatch(fills, id));
         if (row.hidden !== hide) row.hidden = hide;
         if (hide) return;
         visible++;
