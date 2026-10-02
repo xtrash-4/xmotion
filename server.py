@@ -16,6 +16,8 @@ import urllib.request
 import urllib.parse
 import json
 import re
+import zipfile
+import io
 import uvicorn
 
 import render_jj
@@ -591,10 +593,75 @@ def _download_direct_xml(url: str):
         "projects": [{"name": xml_name, "title": title, "characters": len(xml_text)}]
     }
 
+class HeadRequest(urllib.request.Request):
+    def get_method(self):
+        return "HEAD"
+
+def _resolve_all_redirects(url: str, max_redirects: int = 5) -> str:
+    current_url = url.strip()
+    headers = {"User-Agent": "Alight Motion/5.0.273.1028425 (Android; 13)"}
+    for _ in range(max_redirects):
+        try:
+            req = urllib.request.Request(current_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                new_url = resp.geturl()
+                if new_url and new_url != current_url:
+                    current_url = new_url
+                    continue
+                content_type = resp.headers.get("Content-Type", "")
+                if "text/html" in content_type:
+                    body = resp.read().decode("utf-8", errors="ignore")
+                    m_meta = re.search(r'<meta[^>]+http-equiv=[\'"]refresh[\'"][^>]+content=[\'"][^;]+;\s*url=([^\'"]+)[\'"]', body, re.I)
+                    if m_meta:
+                        current_url = urllib.parse.urljoin(current_url, m_meta.group(1).strip())
+                        continue
+                break
+        except Exception:
+            break
+    return current_url
+
+def _download_mediafire_xml(url: str) -> dict:
+    clean_url = _resolve_all_redirects(url)
+    req = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        html = resp.read().decode('utf-8', errors='ignore')
+    m = re.search(r'href=[\'"](https?://download[0-9]*\.mediafire\.com/[^\'"]+)[\'"]', html)
+    if not m:
+        m = re.search(r'aria-label=[\'"]Download file[\'"][^>]*href=[\'"]([^\'"]+)[\'"]', html)
+    if not m:
+        m = re.search(r'id=[\'"]downloadButton[\'"][^>]*href=[\'"]([^\'"]+)[\'"]', html)
+    if not m:
+        raise ValueError("Tidak dapat menemukan tombol unduh langsung di tautan MediaFire.")
+
+    dl_url = m.group(1)
+    req_dl = urllib.request.Request(dl_url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req_dl, timeout=20) as r_dl:
+        content = r_dl.read()
+    xml_text = content.decode('utf-8', errors='replace')
+    if "<scene" not in xml_text and "<?xml" not in xml_text:
+        raise ValueError("Berkas dari MediaFire bukan XML preset Alight Motion yang valid.")
+    m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+    title = m_title.group(1) if m_title else "MediaFire Preset"
+    xml_name = f"mediafire_{uuid.uuid4().hex[:8]}.xml"
+    presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
+    os.makedirs(presets_dir, exist_ok=True)
+    with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
+        fp.write(xml_text)
+    return {
+        "url": url,
+        "xml": xml_text,
+        "xmlName": xml_name,
+        "packageId": f"mediafire_{uuid.uuid4().hex[:8]}",
+        "media": [],
+        "meta": {"title": title, "description": f"Preset XML diunduh langsung dari MediaFire ({len(xml_text):,} karakter)."},
+        "projects": [{"name": xml_name, "title": title, "characters": len(xml_text)}]
+    }
+
 def _get_am_share_metadata(url: str):
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        clean = _resolve_all_redirects(url)
+        req = urllib.request.Request(clean, headers={'User-Agent': 'Alight Motion/5.0.273.1028425 (Android; 13)'})
+        with urllib.request.urlopen(req, timeout=8) as resp:
             html = resp.read().decode('utf-8', errors='ignore')
         m_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
         m_desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
@@ -606,7 +673,6 @@ def _get_am_share_metadata(url: str):
         }
     except Exception:
         return None
-
 
 def _prefetch_media_background(package_id: str, media_list: list):
     media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
@@ -637,116 +703,160 @@ def _prefetch_media_background(package_id: str, media_list: list):
 
 def _download_am_direct_package(url: str, project: str = None) -> dict:
     """
-    Mengunduh dan mengekstrak paket Alight Motion (.zip berisi XML + foto/video/audio)
-    langsung dari Firebase Storage resmi Alight Creative tanpa perantara pihak ketiga.
+    Mengunduh dan mengekstrak paket Alight Motion (.zip berisi XML + foto/video/audio,
+    maupun .xml saja untuk preset tanpa media) langsung dari Firebase Storage resmi Alight Creative.
+    Menggunakan deteksi cepat HEAD request dan streaming chunk buffer untuk mendukung paket besar (>30MB).
     """
-    clean_url = url.strip()
-    
-    # 1. Resolve redirect jika menggunakan shortlink alight.link
-    if "alight.link" in clean_url or "alightcreative.com/am/share" not in clean_url:
-        try:
-            req_red = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-            with urllib.request.urlopen(req_red, timeout=12) as r_red:
-                redir_url = r_red.geturl()
-                if "alightcreative.com/am/share" in redir_url:
-                    clean_url = redir_url
-                else:
-                    html_body = r_red.read().decode('utf-8', errors='ignore')
-                    found_links = re.findall(r'https?://alightcreative\.com/am/share/u/[A-Za-z0-9_-]+/p/[A-Za-z0-9_-]+', html_body)
-                    if found_links:
-                        clean_url = found_links[0]
-        except Exception as e_red:
-            print("[direct-am] Gagal resolve redirect:", e_red)
+    clean_url = _resolve_all_redirects(url)
 
-    # 2. Parse user_id dan package_id
     m = re.search(r"/am/share/u/([A-Za-z0-9_-]+)/p/([A-Za-z0-9_-]+)", clean_url)
     if not m:
         raise ValueError("Format link Alight Motion tidak valid. Format: https://alightcreative.com/am/share/u/{USER}/p/{PACKAGE}")
 
-    user_id = m.group(1)
+    url_uid = m.group(1)
     package_id = m.group(2)
+    clean_pkg = package_id.split("-")[0]
 
-    # 3. Coba unduh projectfiles.zip dari Firebase Storage
-    zip_bytes = None
-    filenames_to_try = ("projectfiles.zip", "projectFiles.zip", "package.zip", "project.zip")
-    last_err = None
+    # Scrape Alight Creative HTML page dengan User-Agent Alight Motion untuk mendapatkan Real UID & Token
+    headers_mobile = {"User-Agent": "Alight Motion/5.0.273.1028425 (Android; 13)"}
+    real_uid = url_uid
+    token = None
+    scraped_title = None
+    try:
+        req_page = urllib.request.Request(clean_url, headers=headers_mobile)
+        with urllib.request.urlopen(req_page, timeout=10) as resp_page:
+            html = resp_page.read().decode("utf-8", errors="ignore")
+            m_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+            if m_title:
+                scraped_title = m_title.group(1).strip()
+            m_real_uid = re.search(r'share%2Fu%2F([a-zA-Z0-9_-]+)%2Fp%2F', html)
+            if m_real_uid:
+                real_uid = m_real_uid.group(1)
+            m_token = re.search(r'token=([a-f0-9-]+)', html)
+            if m_token:
+                token = m_token.group(1)
+    except Exception as e_page:
+        print("[direct-am] Warning scrape page:", e_page)
 
-    for fname in filenames_to_try:
-        object_path = f"share/u/{user_id}/p/{package_id}/{fname}"
-        encoded_path = urllib.parse.quote(object_path, safe="")
-        storage_url = f"https://firebasestorage.googleapis.com/v0/b/alight-creative.appspot.com/o/{encoded_path}?alt=media"
-        try:
-            req = urllib.request.Request(
-                storage_url,
-                headers={
-                    "User-Agent": "AlightMotion/6.2.53 (iOS; gzip)",
-                    "Accept": "*/*",
-                    "Accept-Encoding": "identity",
-                },
+    uids_to_try = []
+    for u in (real_uid, url_uid):
+        if u and u not in uids_to_try:
+            uids_to_try.append(u)
+
+    candidates = [
+        ("zip", "projectfiles.zip"),
+        ("xml", "project.xml"),
+        ("xml", "projectfiles.xml"),
+        ("zip", "package.zip"),
+        ("xml", f"{clean_pkg}.xml"),
+        ("xml", f"{package_id}.xml"),
+        ("xml", "scene.xml"),
+    ]
+
+    target_url = None
+    target_type = None
+    target_name = None
+    headers_dl = {"User-Agent": "AlightMotion/6.2.53 (iOS; gzip)", "Accept": "*/*"}
+
+    # Probing instan dengan HEAD request (0.2s - 0.6s)
+    for uid in uids_to_try:
+        for ftype, fname in candidates:
+            object_path = f"share/u/{uid}/p/{package_id}/{fname}"
+            encoded_path = urllib.parse.quote(object_path, safe="")
+            probe_url = f"https://firebasestorage.googleapis.com/v0/b/alight-creative.appspot.com/o/{encoded_path}?alt=media"
+            try:
+                head_req = HeadRequest(probe_url, headers=headers_dl)
+                with urllib.request.urlopen(head_req, timeout=6) as head_resp:
+                    if head_resp.status == 200:
+                        target_url = probe_url
+                        target_type = ftype
+                        target_name = fname
+                        size_mb = int(head_resp.headers.get("Content-Length", 0)) / (1024 * 1024)
+                        print(f"[direct-am] Terdeteksi berkas sah: {fname} ({size_mb:.2f} MB) via UID {uid}")
+                        break
+            except Exception:
+                continue
+        if target_url:
+            break
+
+    if not target_url:
+        raise ValueError(f"Tidak dapat menemukan berkas preset di cloud Alight Motion untuk package {package_id}. Link mungkin telah kedaluwarsa atau berkas telah dihapus oleh pemilik aslinya.")
+
+    # Unduh berkas dengan chunking buffer 128KB dan timeout memadai (180 detik)
+    print(f"[direct-am] Mengunduh {target_name} dari cloud...", flush=True)
+    req_dl = urllib.request.Request(target_url, headers=headers_dl)
+    downloaded_buf = bytearray()
+    with urllib.request.urlopen(req_dl, timeout=180) as resp_dl:
+        while True:
+            chunk = resp_dl.read(128 * 1024)
+            if not chunk:
+                break
+            downloaded_buf.extend(chunk)
+
+    downloaded_data = bytes(downloaded_buf)
+    downloaded_type = target_type
+    used_filename = target_name
+    print(f"[direct-am] Selesai unduh {used_filename} ({len(downloaded_data):,} bytes)")
+
+    presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
+    os.makedirs(presets_dir, exist_ok=True)
+    media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
+    os.makedirs(media_dir, exist_ok=True)
+
+    if downloaded_type == "zip":
+        with zipfile.ZipFile(io.BytesIO(downloaded_data)) as zf:
+            infolist = zf.infolist()
+            xml_candidates = [info for info in infolist if info.filename.lower().endswith(".xml")]
+            if not xml_candidates:
+                raise ValueError("Paket ZIP tidak berisi berkas deskripsi XML scene.")
+
+            xml_candidates.sort(key=lambda info: info.file_size, reverse=True)
+            main_xml_info = xml_candidates[0]
+            xml_name = main_xml_info.filename
+            xml_text = zf.read(xml_name).decode("utf-8", errors="replace")
+
+            m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+            preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
+
+            with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
+                fp.write(xml_text)
+
+            media_list = []
+            for info in infolist:
+                fn = info.filename
+                if fn.endswith("/"):
+                    continue
+                base_fn = os.path.basename(fn)
+                dest_media = os.path.join(media_dir, base_fn)
+                with open(dest_media, "wb") as fp:
+                    fp.write(zf.read(fn))
+
+                mime, _ = mimetypes.guess_type(base_fn)
+                media_list.append({
+                    "name": base_fn,
+                    "size": info.file_size,
+                    "mime": mime or "application/octet-stream",
+                    "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
+                })
+
+            media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
+                xml_text, media_list, local_media_dir=media_dir
             )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = resp.read()
-                if data and len(data) > 0:
-                    zip_bytes = data
-                    print(f"[direct-am] Berhasil unduh {fname} ({len(zip_bytes)} bytes) untuk package {package_id}")
-                    break
-        except Exception as e:
-            last_err = e
-            continue
-
-    if not zip_bytes:
-        raise ValueError(f"Tidak dapat mengunduh paket Alight Motion dari cloud ({last_err}). Link mungkin telah kedaluwarsa atau dihapus.")
-
-    # 4. Ekstrak ZIP ke runtime/media/{package_id}/ dan runtime/presets/
-    import zipfile, io
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        infolist = zf.infolist()
-        xml_candidates = [info for info in infolist if info.filename.lower().endswith(".xml")]
-        if not xml_candidates:
-            raise ValueError("Paket ZIP tidak berisi berkas deskripsi XML scene.")
-
-        # Pilih XML utama (file XML terbesar jika ada beberapa)
-        xml_candidates.sort(key=lambda info: info.file_size, reverse=True)
-        main_xml_info = xml_candidates[0]
-        xml_name = main_xml_info.filename
-        xml_text = zf.read(xml_name).decode("utf-8", errors="replace")
-
-        # Ekstrak judul preset
-        m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
-        preset_title = m_title.group(1) if m_title else f"Alight Motion Preset ({package_id[:8]})"
-
-        # Simpan XML ke runtime/presets/
-        presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
-        os.makedirs(presets_dir, exist_ok=True)
+    else:
+        # Tipe berkas adalah XML langsung (XML-Only preset)
+        xml_text = downloaded_data.decode("utf-8", errors="replace")
+        if "<scene" not in xml_text and "<?xml" not in xml_text:
+            raise ValueError("Berkas yang diunduh bukan XML preset Alight Motion yang valid.")
+        xml_name = f"project_{package_id}.xml"
         with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
             fp.write(xml_text)
-
-        # Siapkan folder media
-        media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
-        os.makedirs(media_dir, exist_ok=True)
-
+        m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+        preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
         media_list = []
-        for info in infolist:
-            fn = info.filename
-            if fn.endswith("/"):
-                continue
-            base_fn = os.path.basename(fn)
-            dest_media = os.path.join(media_dir, base_fn)
-            with open(dest_media, "wb") as fp:
-                fp.write(zf.read(fn))
-
-            mime, _ = mimetypes.guess_type(base_fn)
-            media_list.append({
-                "name": base_fn,
-                "size": info.file_size,
-                "mime": mime or "application/octet-stream",
-                "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
-            })
-
-        # Ekstrak mediaMap dan deteksi audio secara komprehensif
-        media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
-            xml_text, media_list, local_media_dir=media_dir
-        )
+        media_map = {}
+        found_audio_item = None
+        has_audio_file = False
+        missing_cloud_audio = ("<audio" in xml_text)
 
     result = {
         "url": clean_url,
@@ -766,105 +876,78 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
         "projects": [{"name": xml_name, "title": preset_title, "characters": len(xml_text)}],
     }
 
-    # Simpan ke cache lokal agar pembukaan berikutnya super instan
     _save_package_cache(package_id, project, result)
     if not project:
         _save_package_cache(package_id, None, result)
 
     return result
 
-
 @app.get("/api/project-xml")
 async def get_project_xml(url: str, project: str = None):
     if not url:
         return JSONResponse({"error": "Parameter url wajib diisi."}, status_code=400)
 
-    url = url.strip()
+    raw_url = url.strip()
 
-    # 1. Dukungan link Google Drive langsung (bebas 100% dari pihak ketiga)
-    if "drive.google.com" in url:
+    # 0. Selesaikan semua redirect shortener (s.id, bit.ly, tinyurl, alight.link, dll.)
+    resolved_url = await asyncio.to_thread(_resolve_all_redirects, raw_url)
+
+    # 1. Dukungan link Google Drive langsung
+    if "drive.google.com" in resolved_url or "docs.google.com" in resolved_url:
         try:
-            data = await asyncio.to_thread(_download_gdrive_xml, url)
+            data = await asyncio.to_thread(_download_gdrive_xml, resolved_url)
             return data
         except Exception as e:
             return JSONResponse({"error": f"Gagal mengunduh preset Google Drive: {str(e)}"}, status_code=400)
 
-    # 2. Dukungan link XML langsung di web
-    if (url.startswith("http://") or url.startswith("https://")) and (
-        ".xml" in url or "raw.githubusercontent.com" in url or "pastebin.com/raw" in url
+    # 2. Dukungan link MediaFire langsung
+    if "mediafire.com" in resolved_url:
+        try:
+            data = await asyncio.to_thread(_download_mediafire_xml, resolved_url)
+            return data
+        except Exception as e:
+            return JSONResponse({"error": f"Gagal mengunduh preset MediaFire: {str(e)}"}, status_code=400)
+
+    # 3. Dukungan link XML langsung di web (.xml, github raw, pastebin)
+    if (resolved_url.startswith("http://") or resolved_url.startswith("https://")) and (
+        ".xml" in resolved_url or "raw.githubusercontent.com" in resolved_url or "pastebin.com/raw" in resolved_url
     ):
         try:
-            data = await asyncio.to_thread(_download_direct_xml, url)
+            data = await asyncio.to_thread(_download_direct_xml, resolved_url)
             return data
         except Exception as e:
             return JSONResponse({"error": f"Gagal mengunduh XML: {str(e)}"}, status_code=400)
 
-    # 3. Link share resmi Alight Motion (alightcreative.com / alight.link)
-    if "alightcreative.com" not in url and "alight.link" not in url:
+    # 4. Link share resmi Alight Motion (alightcreative.com / alight.link)
+    if "alightcreative.com" in resolved_url or "alight.link" in resolved_url:
+        direct_error = None
+        try:
+            data = await asyncio.to_thread(_download_am_direct_package, resolved_url, project)
+            if data and data.get("xml"):
+                print(f"[project-xml] Berhasil unduh langsung dari Firebase untuk {data.get('packageId')}")
+                return data
+        except Exception as e_direct:
+            direct_error = str(e_direct)
+            print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({direct_error}), mencoba cache lokal atau remote fallback...")
+
+        # Cek cache offline jika download direct gagal
+        cached = _offline_response(resolved_url, project)
+        if cached:
+            print(f"[project-xml] Memakai offline cache lokal fallback untuk {_package_id_from_url(resolved_url)}")
+            return cached
+
+        # Ambil metadata nama preset untuk pesan error yang ramah
+        am_meta = await asyncio.to_thread(_get_am_share_metadata, resolved_url)
+        preset_title = am_meta.get("title") if am_meta else None
+        err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
+
         return JSONResponse({
-            "error": "Format link tidak dikenali. Masukkan link Alight Motion (alightcreative.com/am/share/...), link Google Drive XML, atau URL XML langsung."
+            "error": f"{err_title_str} tidak dapat diunduh dari cloud ({direct_error}). Pastikan link share masih aktif dan belum dihapus oleh pembuatnya di aplikasi Alight Motion, atau gunakan file XML / Google Drive.",
+            "meta": am_meta
         }, status_code=400)
 
-    # METODE UTAMA: Selalu prioritaskan unduh langsung paket ZIP (XML + Media) fresh dari Firebase Storage Alight Creative
-    direct_error = None
-    try:
-        data = await asyncio.to_thread(_download_am_direct_package, url, project)
-        if data and data.get("xml"):
-            print(f"[project-xml] Berhasil unduh langsung dari Firebase untuk {data.get('packageId')}")
-            return data
-    except Exception as e_direct:
-        direct_error = str(e_direct)
-        print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({e_direct}), mencoba cache lokal atau remote fallback...")
-
-    # Cek cache offline jika download direct gagal (misal link 404 atau server cloud down)
-    cached = _offline_response(url, project)
-    if cached:
-        print(f"[project-xml] Memakai offline cache lokal fallback untuk {_package_id_from_url(url)}")
-        return cached
-
-    # Fallback: jika direct Firebase gagal dan tidak ada cache, coba remote Zervida
-    def fetch_remote():
-        query_params = {"url": url}
-        if project:
-            query_params["project"] = project
-        remote_api = "https://am.zervida.my.id/api/project-xml?" + urllib.parse.urlencode(query_params)
-        req = urllib.request.Request(remote_api, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-        if not isinstance(data, dict) or not data.get("xml"):
-            raise ValueError("respons remote tidak berisi xml")
-        return data
-
-    remote_error = None
-    try:
-        data = await asyncio.to_thread(fetch_remote)
-        xml_name = data.get("xmlName") or f"project_{data.get('packageId', uuid.uuid4().hex[:8])}.xml"
-        presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
-        os.makedirs(presets_dir, exist_ok=True)
-        with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
-            fp.write(data["xml"])
-
-        package_id = data.get("packageId") or _package_id_from_url(url)
-        if package_id and safe_name(package_id):
-            _save_package_cache(package_id, project, data)
-            if not project:
-                _save_package_cache(package_id, None, data)
-            if data.get("media"):
-                asyncio.create_task(asyncio.to_thread(_prefetch_media_background, package_id, data["media"]))
-        return data
-    except Exception as e:
-        remote_error = str(e)
-
-    # Ambil metadata nama preset dari Alight Creative untuk pesan error yang ramah
-    am_meta = await asyncio.to_thread(_get_am_share_metadata, url)
-    preset_title = am_meta.get("title") if am_meta else None
-    err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
-
-
-    print(f"[project-xml] Semua metode gagal untuk {url}: direct={direct_error}, remote={remote_error}")
     return JSONResponse({
-        "error": f"{err_title_str} tidak dapat diunduh dari cloud ({direct_error}). Pastikan link share masih aktif di aplikasi Alight Motion, atau gunakan link Google Drive XML.",
-        "meta": am_meta
+        "error": "Format link tidak dikenali. Masukkan link Alight Motion (alightcreative.com / alight.link), Google Drive, MediaFire, atau tautan XML langsung."
     }, status_code=400)
 
 @app.get("/api/effect-xml")

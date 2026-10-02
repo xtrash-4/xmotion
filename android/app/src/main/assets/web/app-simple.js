@@ -789,13 +789,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const isAm = link.includes('alightcreative.com') || link.includes('alight.link');
-      const isDrive = link.includes('drive.google.com');
-      const isXml = link.toLowerCase().includes('.xml');
       const isHttp = link.startsWith('http://') || link.startsWith('https://');
-
-      if (!isHttp || (!isAm && !isDrive && !isXml)) {
-        showAmStatus('error', 'Link tidak dikenali.', 'Gunakan link resmi Alight Motion, Google Drive XML, atau URL XML preset.');
+      if (!isHttp) {
+        showAmStatus('error', 'Tautan tidak valid.', 'Harap masukkan tautan web lengkap diawali http:// atau https://');
         return;
       }
 
@@ -837,7 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ? `url=${encodeURIComponent(link)}&project=${encodeURIComponent(selectedProject)}` 
           : `url=${encodeURIComponent(link)}`;
 
-        showAmStatus('loading', 'Mengambil metadata preset...', 'Menghubungi endpoint /api/project-xml...');
+        showAmStatus('loading', 'Mengunduh paket Alight Motion...', 'Sedang mendeteksi & mengunduh berkas preset dari cloud...');
         const resp = await fetch(`/api/project-xml?${query}`);
         const data = await resp.json();
 
