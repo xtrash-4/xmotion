@@ -2024,6 +2024,83 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Beautifier Otomatis Hasil Ekspor Video MP4
+  const expResultBox = byId('expResult');
+  if (expResultBox) {
+    const formatExportResultDom = () => {
+      const vid = expResultBox.querySelector('video');
+      const link = expResultBox.querySelector('a');
+      if (vid && link && !expResultBox.dataset.beautified) {
+        expResultBox.dataset.beautified = 'true';
+        
+        // Ekstrak info ukuran file dari teks link (misal: "Unduh matz... (24.4 MB)")
+        const rawText = link.textContent || '';
+        const sizeMatch = rawText.match(/\(([^)]+MB[^)]*)\)/i) || rawText.match(/\(([^)]+)\)/);
+        const sizeStr = sizeMatch ? sizeMatch[1] : '';
+        const fileName = link.getAttribute('download') || 'video_xmotion.mp4';
+        
+        // Buat kartu wrapper baru yang rapi
+        const card = document.createElement('div');
+        card.className = 'exp-success-card';
+        card.innerHTML = `
+          <div class="exp-badge-success">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>VIDEO BERHASIL DIEKSPOR</span>
+          </div>
+          <div class="exp-format-info">Format MP4 Full HD • 60 FPS • Audio Jernih</div>
+        `;
+        
+        // Pindahkan video ke dalam kartu
+        vid.controls = true;
+        vid.setAttribute('playsinline', 'true');
+        card.appendChild(vid);
+        
+        // Ganti link unduh dengan tombol Jelly Capsule 3D
+        link.className = 'btn-exp-download-jelly';
+        link.innerHTML = `
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>SIMPAN VIDEO KE GALERI</span>
+          ${sizeStr ? `<span class="btn-exp-size-pill">${sizeStr}</span>` : ''}
+        `;
+        card.appendChild(link);
+        
+        // Tombol kembali ke editor
+        const btnFinish = document.createElement('button');
+        btnFinish.type = 'button';
+        btnFinish.className = 'btn-action chrome-ghost';
+        btnFinish.style.marginTop = '10px';
+        btnFinish.style.width = '100%';
+        btnFinish.textContent = 'Kembali ke Editor';
+        btnFinish.addEventListener('click', () => {
+          if (exportModal) {
+            if (typeof exportModal.close === 'function') exportModal.close();
+            else exportModal.style.display = 'none';
+          }
+        });
+        card.appendChild(btnFinish);
+        
+        // Bersihkan teks mentah lama & masukkan kartu baru
+        expResultBox.innerHTML = '';
+        expResultBox.appendChild(card);
+        
+        // Scroll modal secara halus agar user langsung melihat tombol unduh
+        setTimeout(() => {
+          if (exportModal) exportModal.scrollTo({ top: exportModal.scrollHeight, behavior: 'smooth' });
+        }, 150);
+      }
+    };
+
+    const expObserver = new MutationObserver(() => {
+      formatExportResultDom();
+    });
+    expObserver.observe(expResultBox, { childList: true, subtree: true });
+
+    // Reset flag saat tombol ekspor baru ditekan
+    byId('expStart')?.addEventListener('click', () => {
+      delete expResultBox.dataset.beautified;
+    });
+  }
+
   // Tombol Back Android (dipanggil MainActivity.onBackPressed): true = sudah ditangani halaman.
   window.__androidBack = () => {
     if (exportModal && exportModal.open) { exportModal.close(); return true; }
