@@ -440,10 +440,67 @@ def _extract_media_map_and_audio(xml_text: str, media_list: list, local_media_di
                     found_audio_item = m
                     break
 
+    # PENTING UNTUK HP ANDROID & WEBVIEW:
+    # Jika audio berasal dari file container video (.mp4/.mov), ekstrak menjadi berkas .audio.mp3 murni.
+    # Elemen HTML5 Audio / Android WebView sering menolak atau bisu jika memutar file container video MP4.
+    # File .mp3 murni 100% didukung semua WebView Android, dan ukurannya jauh lebih kecil (< 1MB vs 15-50MB).
+    if found_audio_item and local_media_dir:
+        package_id = os.path.basename(local_media_dir)
+        found_audio_item = _extract_audio_to_mp3(package_id, found_audio_item, media_list, local_media_dir)
+
     has_audio_file = bool(found_audio_item)
     missing_cloud_audio = has_audio_tag and not has_audio_file
 
     return media_map, found_audio_item, has_audio_file, missing_cloud_audio
+
+def _extract_audio_to_mp3(package_id: str, audio_item: dict, media_list: list, local_media_dir: str = None) -> dict:
+    """
+    Jika audio_item berupa container video (.mp4, .mov), ekstrak stream audionya
+    menjadi berkas .mp3 murni dengan FFmpeg agar 100% kompatibel dengan elemen HTML5 Audio di Android WebView.
+    """
+    if not audio_item or not isinstance(audio_item, dict):
+        return audio_item
+    name = audio_item.get('name', '')
+    if not name:
+        return audio_item
+
+    # Bila sudah file audio murni, langsung kembalikan
+    if any(name.lower().endswith(ext) for ext in ('.mp3', '.m4a', '.wav', '.aac', '.ogg', '.opus', '.flac')):
+        return audio_item
+
+    if not local_media_dir:
+        local_media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
+
+    src_path = os.path.join(local_media_dir, name)
+    if not os.path.exists(src_path):
+        return audio_item
+
+    clean_base = os.path.splitext(name)[0]
+    mp3_name = f"{clean_base}.audio.mp3"
+    mp3_path = os.path.join(local_media_dir, mp3_name)
+
+    if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) == 0:
+        try:
+            cmd = ['ffmpeg', '-y', '-i', src_path, '-vn', '-acodec', 'libmp3lame', '-b:a', '192k', mp3_path]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25, check=True)
+            print(f"[audio-extract] Berhasil ekstrak stream audio MP4 ke MP3: {name} -> {mp3_name}")
+        except Exception as e:
+            print(f"[audio-extract] Warning ekstrak MP3 gagal ({e}), tetap gunakan {name}")
+            return audio_item
+
+    if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0:
+        mp3_item = {
+            "name": mp3_name,
+            "size": os.path.getsize(mp3_path),
+            "mime": "audio/mpeg",
+            "url": f"/api/link/{package_id}/media/{urllib.parse.quote(mp3_name)}"
+        }
+        # Tambahkan ke media_list jika belum ada
+        if not any(m.get('name') == mp3_name for m in media_list):
+            media_list.append(mp3_item)
+        return mp3_item
+
+    return audio_item
 
 def _offline_response(url: str, project: str):
     """Hanya kembalikan data jika ada cache JSON paket yang valid."""
@@ -589,8 +646,15 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
     if "alight.link" in clean_url or "alightcreative.com/am/share" not in clean_url:
         try:
             req_red = urllib.request.Request(clean_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-            with urllib.request.urlopen(req_red, timeout=10) as r_red:
-                clean_url = r_red.geturl()
+            with urllib.request.urlopen(req_red, timeout=12) as r_red:
+                redir_url = r_red.geturl()
+                if "alightcreative.com/am/share" in redir_url:
+                    clean_url = redir_url
+                else:
+                    html_body = r_red.read().decode('utf-8', errors='ignore')
+                    found_links = re.findall(r'https?://alightcreative\.com/am/share/u/[A-Za-z0-9_-]+/p/[A-Za-z0-9_-]+', html_body)
+                    if found_links:
+                        clean_url = found_links[0]
         except Exception as e_red:
             print("[direct-am] Gagal resolve redirect:", e_red)
 

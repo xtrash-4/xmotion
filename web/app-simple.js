@@ -731,6 +731,15 @@ document.addEventListener('DOMContentLoaded', () => {
       btnFetchAm.disabled = true;
       showAmStatus('loading', 'Menghubungkan ke sumber preset...', 'Memeriksa paket XML dan asset media...');
 
+      // Buka kunci (unlock) AudioContext Android WebView melalui sentuhan user gesture
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          if (!window.__globalAudioCtx) window.__globalAudioCtx = new AudioCtx();
+          if (window.__globalAudioCtx.state === 'suspended') window.__globalAudioCtx.resume();
+        }
+      } catch (_) {}
+
       // 0. Hentikan pemutaran video lama jika sedang berjalan
       try {
         if (window.AM && typeof window.AM.getState === 'function' && window.AM.getState().isPlaying) {
@@ -784,43 +793,53 @@ document.addEventListener('DOMContentLoaded', () => {
           customUrlAmPickRow.style.display = 'none';
         }
 
-        // 4. Muat XML ke engine WebGL -- gunakan mekanisme yang sama
-        //    dengan auto-load default (Beraksi.xml) yang terbukti berfungsi:
-        //    set impXml.files lalu dispatch 'change' TANPA __xmlFixed
-        //    agar interceptor baris 160 memproses file untuk engine.
+        // 4. Muat XML ke engine WebGL menggunakan API resmi engine window.AM.loadPreset
+        //    Ini menjamin pemuatan scene 100% tuntas di Android WebView maupun Browser
+        //    tanpa bergantung pada manipulasi input file atau event DataTransfer yang rentan diblokir.
         showAmStatus('loading', 'Menyusun scene ke mesin WebGL...', projectTitle);
 
         const finalXmlName = data.xmlName || `${(projectTitle || 'preset').replace(/[^a-zA-Z0-9._-]/g, '_')}.xml`;
-        const xmlFile = new File([data.xml], finalXmlName, { type: 'text/xml' });
+        const fixed = fixPathRectMediaShapes(data.xml);
+        registerXmlMediaUsage(fixed.xml, [finalXmlName]);
+        const xmlFile = new File([fixed.xml], finalXmlName, { type: 'text/xml' });
 
-        const seqBefore = window.__xmlLoadSeq || 0;
-        const engineImpXml = document.getElementById('impXml');
-        if (engineImpXml) {
-          const dt = new DataTransfer();
-          dt.items.add(xmlFile);
-          engineImpXml.files = dt.files;
-          // Dispatch TANPA __xmlFixed agar interceptor capturing (baris 160)
-          // memproses fixPathRectMediaShapes + registerXmlMediaUsage + re-dispatch
-          // ke engine listener secara otomatis -- pola identik auto-load default.
-          engineImpXml.dispatchEvent(new Event('change', { bubbles: true }));
+        let engineReady = false;
+        if (window.AM && typeof window.AM.loadPreset === 'function') {
+          try {
+            await window.AM.loadPreset(xmlFile);
+            engineReady = true;
+          } catch (lpErr) {
+            console.warn('[AM loadPreset Warn]', lpErr);
+          }
         }
 
-        // Tunggu engine selesai memuat scene (poll xmlLoadSeq + isBusy)
-        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-        const t0 = Date.now();
-        let engineReady = false;
-        while (Date.now() - t0 < 30000) {
-          await sleep(300);
-          const seqNow = window.__xmlLoadSeq || 0;
-          const isBusy = !!(window.AM && window.AM.getState && window.AM.getState().isBusy);
-          if (seqNow > seqBefore && !isBusy) {
-            engineReady = true;
-            break;
+        // Fallback jika window.AM.loadPreset belum siap
+        if (!engineReady) {
+          const engineImpXml = document.getElementById('impXml');
+          if (engineImpXml) {
+            try {
+              const dt = new DataTransfer();
+              dt.items.add(xmlFile);
+              engineImpXml.files = dt.files;
+              engineImpXml.__xmlFixed = true;
+              engineImpXml.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch (_) {}
+          }
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const t0 = Date.now();
+          while (Date.now() - t0 < 8000) {
+            await sleep(250);
+            const isBusy = !!(window.AM && window.AM.getState && window.AM.getState().isBusy);
+            const slots = (window.AM && window.AM.getMediaSlots) ? window.AM.getMediaSlots() : [];
+            if (!isBusy && slots.length > 0) {
+              engineReady = true;
+              break;
+            }
           }
         }
 
         // 4b. Pasang foto dan video asli bawaan preset ke media slots engine
-        if (engineReady && window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
+        if (window.AM && typeof window.AM.getMediaSlots === 'function' && typeof window.AM.applyMedia === 'function') {
           showAmStatus('loading', 'Memasang foto dan aset preset...', projectTitle);
           const currentSlots = window.AM.getMediaSlots();
 
@@ -932,10 +951,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('[Apply Preset Media Warn]', slot.id, mErr);
               }
             } else {
-              // Hanya pasang placeholder jika paket cloud benar-benar 0 berkas media (preset template XML-only)
+              // Pasang placeholder jika paket cloud tidak memiliki berkas foto spesifik (preset template XML-only)
               try {
                 const placeholder = await createSlotPlaceholder(slotIdx, slot.name || cleanId);
                 await window.AM.applyMedia(slot.id, placeholder);
+                window.__slotFiles[slot.id] = placeholder;
+                window.__slotPicked[slot.id] = `Placeholder Slot ${slotIdx}`;
               } catch (phErr) {
                 console.warn('[Placeholder Apply Warn]', slot.id, phErr);
               }

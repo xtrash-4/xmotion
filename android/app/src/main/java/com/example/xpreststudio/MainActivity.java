@@ -97,7 +97,8 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        webView.clearCache(true);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -239,7 +240,11 @@ public class MainActivity extends Activity {
 
     private void loadApp() {
         showLoading("Menghubungkan ke server...");
-        webView.loadUrl(APP_URL);
+        java.util.Map<String, String> extraHeaders = new java.util.HashMap<>();
+        extraHeaders.put("Cache-Control", "no-cache, no-store, must-revalidate");
+        extraHeaders.put("Pragma", "no-cache");
+        extraHeaders.put("Expires", "0");
+        webView.loadUrl(APP_URL, extraHeaders);
     }
 
     private void injectAndroidBridge() {
