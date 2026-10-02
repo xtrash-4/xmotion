@@ -1543,11 +1543,51 @@ document.addEventListener('DOMContentLoaded', () => {
         outW = Math.round(val * r);
       }
       if (val === 720) opt.textContent = `${outW}x${outH} (720p HD)`;
-      else if (val === 1080) opt.textContent = `${outW}x${outH} (1080p Full HD)`;
+      else if (val === 1080) opt.textContent = `${outW}x${outH} (1080p Full HD - Tajam)`;
+      else if (val === 2160) opt.textContent = `${outW}x${outH} (4K Ultra HD - Asli No Gimik)`;
+      else if (val === 1440) opt.textContent = `${outW}x${outH} (2K Quad HD)`;
       else if (val === 480) opt.textContent = `${outW}x${outH} (480p SD)`;
-      else if (val === 1440) opt.textContent = `${outW}x${outH} (2K Ultra HD)`;
     });
+    syncExportBitrate();
   };
+
+  const syncExportBitrate = () => {
+    const expRes = document.getElementById('expRes');
+    const expBitrate = document.getElementById('expBitrate');
+    const expQualityMode = document.getElementById('expQualityMode');
+    const bitrateHintBadge = document.getElementById('bitrateHintBadge');
+    if (!expBitrate) return;
+
+    const resVal = expRes ? parseInt(expRes.value, 10) : 1080;
+    const mode = expQualityMode ? expQualityMode.value : 'ultra';
+
+    let factor = 0.12;
+    if (mode === 'ultra') {
+      factor = resVal >= 2160 ? 0.14 : (resVal >= 1440 ? 0.12 : 0.10);
+    } else if (mode === 'high') {
+      factor = resVal >= 2160 ? 0.10 : (resVal >= 1440 ? 0.08 : 0.07);
+    } else {
+      factor = 0.05;
+    }
+    expBitrate.value = String(factor);
+
+    const fps = parseInt(document.getElementById('expFps')?.value || '60', 10);
+    let w = 1080, h = 1920;
+    if (resVal === 2160) { w = 2160; h = 3840; }
+    else if (resVal === 1440) { w = 1440; h = 2560; }
+    else if (resVal === 720) { w = 720; h = 1280; }
+    else if (resVal === 480) { w = 480; h = 854; }
+
+    const approxMbps = Math.round((w * h * fps * factor) / 1000000);
+    if (bitrateHintBadge) {
+      bitrateHintBadge.textContent = `${approxMbps} Mbps (Super Tajam)`;
+    }
+  };
+
+  document.getElementById('expRes')?.addEventListener('change', syncExportBitrate);
+  document.getElementById('expFps')?.addEventListener('change', syncExportBitrate);
+  document.getElementById('expQualityMode')?.addEventListener('change', syncExportBitrate);
+  setTimeout(syncExportBitrate, 500);
 
   const buildXmlFiles = (textEdits, ratioConfig) => {
     const rConfig = ratioConfig || window.__presetRatioConfig || { ratio: 'original', mode: 'fit' };

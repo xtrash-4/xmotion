@@ -534,11 +534,12 @@
               <div class="control-field">
                 <label for="expRes" style="font-size:0.8rem; font-weight:600; color:var(--text-secondary);">Resolusi Video</label>
                 <select id="expRes" class="select-dropdown">
-                  <option value="720" selected>720p HD (Rekomendasi Cepat)</option>
-                  <option value="1080">1080p Full HD (Kualitas Maksimal)</option>
+                  <option value="1080" selected>1080p Full HD (Sangat Jernih &amp; Cepat)</option>
+                  <option value="2160">2160p (4K Ultra HD - Asli No Gimik)</option>
+                  <option value="1440">1440p (2K Quad HD)</option>
+                  <option value="720">720p HD (Standar)</option>
                   <option value="480">480p (Hemat Ukuran)</option>
-                  <option value="1440">1440p (2K Ultra HD)</option>
-                  <option value="same">Sama dengan Resolusi Preview</option>
+                  <option value="same">Sama dengan Resolusi Asli Preset</option>
                 </select>
               </div>
 
@@ -552,9 +553,22 @@
               </div>
             </div>
 
+            <!-- Bitrate / Quality Mode -->
+            <div class="control-field" style="margin-top:10px;">
+              <label for="expQualityMode" style="font-size:0.8rem; font-weight:600; color:var(--text-secondary); display:flex; justify-content:space-between;">
+                <span>Kualitas Bitrate (Ketajaman Gambar)</span>
+                <span id="bitrateHintBadge" style="color:var(--accent-primary); font-size:0.75rem; font-weight:700;">Bitrate Tinggi</span>
+              </label>
+              <select id="expQualityMode" class="select-dropdown">
+                <option value="ultra" selected>Kualitas Ultra (Bitrate Maksimal, Tajam Tanpa Buram)</option>
+                <option value="high">Kualitas Tinggi (Standar YouTube/TikTok HD)</option>
+                <option value="medium">Kualitas Sedang (Ukuran Berkas Lebih Ringkas)</option>
+              </select>
+            </div>
+
             <div style="display:none;" aria-hidden="true">
               <select id="expAudioSr"><option value="auto" selected></option></select>
-              <input type="range" id="expBitrate" value="0.08">
+              <input type="range" id="expBitrate" value="0.12" min="0.04" max="0.30" step="0.01">
               <input type="number" id="expFpsCustom" value="45">
               <div id="expFpsCustomRow"></div>
               <div id="expBitrateLabel"></div>
@@ -887,7 +901,7 @@
 
   <!-- Load WebGL Engine & Custom Simple Studio Controller -->
   <script type="module" src="./runtime/assets/preset-VCGEVJ32.js"></script>
-  <script src="./app-simple.js?v=36"></script>
+  <script src="./app-simple.js?v=37"></script>
 </body>
 
 </html>
