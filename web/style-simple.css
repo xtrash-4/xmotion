@@ -1401,24 +1401,43 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .link-status-box {
-  background: #121419;
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(8, 14, 26, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1.5px solid #38bdf8;
   border-radius: var(--radius-md);
   padding: 12px 16px;
   margin-top: 10px;
+  box-shadow: 0 4px 18px rgba(2, 132, 199, 0.25), inset 0 0 12px rgba(56, 189, 248, 0.1);
+  box-sizing: border-box;
+}
+
+.link-status-box.loading {
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+}
+
+.link-status-box.success {
+  border-color: #22c55e;
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.35);
+}
+
+.link-status-box.error {
+  border-color: #f43f5e;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.35);
 }
 
 .status-main {
   font-family: var(--font-heading);
-  font-size: 0.85rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 800;
   color: #ffffff;
+  letter-spacing: 0.01em;
 }
 
 .status-sub {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: 0.76rem;
+  color: #94a3b8;
+  margin-top: 3px;
+  line-height: 1.35;
 }
 
 /* ────────── TAB 2: RATIO, MEDIA SLOTS & TEXT ────────── */
@@ -3060,14 +3079,34 @@ dialog#exportModal::backdrop {
   backdrop-filter: blur(8px);
 }
 
-/* ────────── BEAUTIFIED EXPORT RESULT CARD & BUTTONS ────────── */
+/* ────────── BEAUTIFIED EXPORT RESULT CARD & BUTTONS (COMPACT & PROPORTIONAL) ────────── */
+#pane-ekspor.export-done > .card-header,
+#pane-ekspor.export-done > .grid-2-col,
+#pane-ekspor.export-done > .control-field,
+#pane-ekspor.export-done > #expStart,
+#pane-ekspor.export-done > #exportProgressBox {
+  display: none !important;
+}
+
 .exp-success-card {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 10px;
+  margin-top: 4px;
   box-sizing: border-box;
+  animation: expCardPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes expCardPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .exp-badge-success {
@@ -3077,12 +3116,13 @@ dialog#exportModal::backdrop {
   background: #dcfce7;
   color: #15803d;
   border: 1.5px solid #86efac;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: var(--radius-pill);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.15);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
   margin-bottom: 6px;
+  letter-spacing: 0.02em;
 }
 
 .exp-format-info {
@@ -3093,18 +3133,50 @@ dialog#exportModal::backdrop {
   font-weight: 600;
 }
 
+/* Frame Pratinjau Video Proporsional di Layar HP (Tinggi Dibatasi & Rapi) */
+.exp-video-frame {
+  position: relative;
+  width: 100%;
+  max-width: 220px;
+  height: 240px;
+  max-height: 38vh;
+  margin: 6px auto 14px auto;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #020617;
+  border: 2.5px solid #38bdf8;
+  box-shadow: 0 10px 28px rgba(2, 132, 199, 0.35), 0 0 18px rgba(56, 189, 248, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exp-video-frame video,
+.exp-success-card video {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: 240px !important;
+  aspect-ratio: 9 / 16 !important;
+  object-fit: contain !important;
+  border-radius: 14px;
+  background: #000000;
+  display: block !important;
+  outline: none;
+}
+
 .btn-exp-download-jelly {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 10px !important;
   width: 100% !important;
-  padding: 14px 20px !important;
+  padding: 13px 20px !important;
   background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%) !important;
   color: #ffffff !important;
   font-family: var(--font-heading) !important;
   font-weight: 800 !important;
-  font-size: 0.96rem !important;
+  font-size: 0.95rem !important;
   letter-spacing: 0.02em !important;
   text-decoration: none !important;
   border-radius: 16px !important;
@@ -3141,4 +3213,418 @@ dialog#exportModal::backdrop {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.btn-re-export-link {
+  background: transparent;
+  border: none;
+  color: #0284c7;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.btn-re-export-link:hover {
+  color: #0369a1;
+}
+
+/* ────────── Y2K CYBER RETRO LINK PROCESS SCANNER HUD ────────── */
+.welcome-status.y2k-cyber-scanner {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 16px;
+  padding: 16px 16px 18px 16px;
+  background: linear-gradient(135deg, rgba(8, 14, 26, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 2px solid #38bdf8;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(2, 132, 199, 0.35), inset 0 0 20px rgba(56, 189, 248, 0.15), 4px 4px 0px #0369a1;
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: cyberPanelFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.welcome-status[hidden] {
+  display: none !important;
+}
+
+@keyframes cyberPanelFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Garis Laser Hologram Scanner */
+.cyber-scan-beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #38bdf8 30%, #ffffff 50%, #38bdf8 70%, transparent 100%);
+  box-shadow: 0 0 14px 2px #38bdf8, 0 0 24px #0284c7;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 4;
+  animation: cyberLaserSweep 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes cyberLaserSweep {
+  0% {
+    top: 2%;
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 96%;
+    opacity: 0.4;
+  }
+}
+
+/* Header Tag HUD Cyber */
+.cyber-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed rgba(56, 189, 248, 0.25);
+  padding-bottom: 8px;
+}
+
+.cyber-terminal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.cyber-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+  animation: cyberDotPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cyberDotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.4; }
+}
+
+/* Mini Audio Frequency Bars / Equalizer */
+.cyber-freq-indicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+}
+
+.freq-bar {
+  width: 3px;
+  background: #38bdf8;
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+  animation: freqJump 0.8s ease-in-out infinite alternate;
+}
+
+.freq-bar:nth-child(1) { height: 6px; animation-delay: 0.1s; }
+.freq-bar:nth-child(2) { height: 14px; animation-delay: 0.3s; }
+.freq-bar:nth-child(3) { height: 10px; animation-delay: 0.15s; }
+.freq-bar:nth-child(4) { height: 8px; animation-delay: 0.25s; }
+
+@keyframes freqJump {
+  0% { transform: scaleY(0.3); }
+  100% { transform: scaleY(1.1); }
+}
+
+/* Core Hologram Radar Orbit */
+.cyber-core-wrap {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 4px auto 10px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cyber-radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.15);
+  animation: cyberRadarRotate 4s linear infinite;
+}
+
+@keyframes cyberRadarRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.radar-sweep {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  transform-origin: 0 0;
+  background: conic-gradient(from 0deg, rgba(56, 189, 248, 0.4) 0deg, transparent 90deg);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.radar-dot {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+.radar-dot.dot-1 {
+  top: 15%;
+  right: 20%;
+  animation: cyberDotGlow 1.4s ease-in-out infinite alternate;
+}
+
+.radar-dot.dot-2 {
+  bottom: 20%;
+  left: 20%;
+  animation: cyberDotGlow 1.8s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes cyberDotGlow {
+  0% { opacity: 0.3; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1.3); }
+}
+
+.cyber-center-icon {
+  position: relative;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1.5px solid #7dd3fc;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.cyber-am-svg {
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 0 4px #bae6fd);
+  animation: iconBreathe 2s ease-in-out infinite alternate;
+}
+
+@keyframes iconBreathe {
+  0% { transform: scale(0.92); }
+  100% { transform: scale(1.08); }
+}
+
+/* Status Text Typography */
+.welcome-status .ws-text {
+  text-align: center;
+  margin-bottom: 12px;
+  z-index: 2;
+}
+
+.welcome-status .ws-title {
+  font-family: var(--font-heading);
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  margin-bottom: 4px;
+}
+
+.welcome-status .ws-desc {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Neon Liquid Progress Tube */
+.cyber-progress-tube {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 9999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 10px rgba(56, 189, 248, 0.2);
+  margin-bottom: 12px;
+}
+
+.tube-glow-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #00f0ff 0%, #38bdf8 30%, #ec4899 65%, #00f0ff 100%);
+  background-size: 200% 100%;
+  border-radius: 9999px;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
+  animation: tubeStreamFlow 1.6s linear infinite;
+}
+
+@keyframes tubeStreamFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* 3-Step Pipeline Indicator */
+.cyber-pipeline-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-top: 6px;
+  border-top: 1px solid rgba(56, 189, 248, 0.15);
+  font-family: var(--font-heading);
+}
+
+.pipe-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0.4;
+  transition: all 0.3s ease;
+}
+
+.pipe-step .step-num {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+.pipe-step .step-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #94a3b8;
+}
+
+.pipe-divider {
+  color: rgba(56, 189, 248, 0.3);
+  font-size: 0.72rem;
+}
+
+.pipe-step.active {
+  opacity: 1;
+}
+
+.pipe-step.active .step-num {
+  background: #38bdf8;
+  color: #080e1a;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.pipe-step.active .step-label {
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  animation: labelPulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes labelPulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.pipe-step.done {
+  opacity: 0.9;
+}
+
+.pipe-step.done .step-num {
+  background: #22c55e;
+  color: #ffffff;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.pipe-step.done .step-label {
+  color: #86efac;
+}
+
+/* ERROR STATE PADA CYBER SCANNER */
+.welcome-status.is-error {
+  border-color: #f43f5e !important;
+  box-shadow: 0 10px 30px rgba(244, 63, 94, 0.35), inset 0 0 20px rgba(244, 63, 94, 0.15), 4px 4px 0px #9f1239 !important;
+}
+
+.welcome-status.is-error .cyber-scan-beam {
+  background: linear-gradient(90deg, transparent 0%, #f43f5e 30%, #ffffff 50%, #f43f5e 70%, transparent 100%) !important;
+  box-shadow: 0 0 14px 2px #f43f5e !important;
+}
+
+.welcome-status.is-error .cyber-terminal-badge {
+  background: rgba(244, 63, 94, 0.15) !important;
+  border-color: rgba(244, 63, 94, 0.5) !important;
+  color: #f43f5e !important;
+  text-shadow: 0 0 8px rgba(244, 63, 94, 0.5) !important;
+}
+
+.welcome-status.is-error .cyber-badge-dot {
+  background: #f43f5e !important;
+  box-shadow: 0 0 8px #f43f5e !important;
+}
+
+.welcome-status.is-error .freq-bar {
+  background: #f43f5e !important;
+  box-shadow: 0 0 6px rgba(244, 63, 94, 0.6) !important;
+}
+
+.welcome-status.is-error .cyber-center-icon {
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
+  border-color: #fda4af !important;
+  box-shadow: 0 0 14px rgba(244, 63, 94, 0.6) !important;
+}
+
+.welcome-status.is-error .ws-title {
+  color: #fda4af !important;
+  text-shadow: 0 0 10px rgba(244, 63, 94, 0.6) !important;
+}
+
+.welcome-status.is-error .tube-glow-fill {
+  background: #f43f5e !important;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.8) !important;
+  animation: none !important;
 }

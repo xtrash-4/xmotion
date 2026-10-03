@@ -1894,8 +1894,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!wStatus) return;
     wStatus.hidden = !kind;
     wStatus.classList.toggle('is-error', kind === 'error');
-    byId('welcomeStatusTitle').textContent = title || '';
-    byId('welcomeStatusDesc').textContent = desc || '';
+    const titleEl = byId('welcomeStatusTitle');
+    const descEl = byId('welcomeStatusDesc');
+    if (titleEl) titleEl.textContent = title || '';
+    if (descEl) descEl.textContent = desc || '';
+
+    // Update 3-Step Pipeline HUD Matrix
+    const step1 = byId('pipeStep1');
+    const step2 = byId('pipeStep2');
+    const step3 = byId('pipeStep3');
+    if (step1 && step2 && step3) {
+      if (kind === 'error') {
+        step1.className = 'pipe-step';
+        step2.className = 'pipe-step';
+        step3.className = 'pipe-step';
+      } else if (kind === 'loading') {
+        const fullText = `${title || ''} ${desc || ''}`.toLowerCase();
+        if (fullText.includes('webgl') || fullText.includes('scene') || fullText.includes('menyusun')) {
+          step1.className = 'pipe-step done';
+          step2.className = 'pipe-step done';
+          step3.className = 'pipe-step active';
+        } else if (fullText.includes('unduh') || fullText.includes('mengunduh') || fullText.includes('cloud') || fullText.includes('xml') || fullText.includes('media') || fullText.includes('paket')) {
+          step1.className = 'pipe-step done';
+          step2.className = 'pipe-step active';
+          step3.className = 'pipe-step';
+        } else {
+          step1.className = 'pipe-step active';
+          step2.className = 'pipe-step';
+          step3.className = 'pipe-step';
+        }
+      }
+    }
   };
   const lockWelcome = (on) => {
     welcome?.classList.toggle('is-busy', on);
@@ -2054,6 +2083,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (vid && link && !expResultBox.dataset.beautified) {
         expResultBox.dataset.beautified = 'true';
         
+        // Aktifkan mode selesai pada panel ekspor untuk menyembunyikan form input yang memakan tempat
+        const paneEkspor = byId('pane-ekspor');
+        if (paneEkspor) paneEkspor.classList.add('export-done');
+        const modalTitle = byId('expModalTitle');
+        if (modalTitle) modalTitle.textContent = 'Video Berhasil Diekspor! 🎉';
+
         // Ekstrak info ukuran file dari teks link (misal: "Unduh matz... (24.4 MB)")
         const rawText = link.textContent || '';
         const sizeMatch = rawText.match(/\(([^)]+MB[^)]*)\)/i) || rawText.match(/\(([^)]+)\)/);
@@ -2071,10 +2106,13 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="exp-format-info">Format MP4 Full HD • 60 FPS • Audio Jernih</div>
         `;
         
-        // Pindahkan video ke dalam kartu
+        // Pindahkan video ke dalam frame proporsional (tinggi terkunci rapi, tidak raksasa)
+        const videoFrame = document.createElement('div');
+        videoFrame.className = 'exp-video-frame';
         vid.controls = true;
         vid.setAttribute('playsinline', 'true');
-        card.appendChild(vid);
+        videoFrame.appendChild(vid);
+        card.appendChild(videoFrame);
         
         // Ganti link unduh dengan tombol Jelly Capsule 3D
         link.className = 'btn-exp-download-jelly';
@@ -2099,15 +2137,28 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
         card.appendChild(btnFinish);
+
+        // Tombol Render Ulang / Ubah Pengaturan
+        const btnReExport = document.createElement('button');
+        btnReExport.type = 'button';
+        btnReExport.className = 'btn-re-export-link';
+        btnReExport.innerHTML = `<span>⚙️ Render Ulang / Ubah Pengaturan</span>`;
+        btnReExport.addEventListener('click', () => {
+          if (paneEkspor) paneEkspor.classList.remove('export-done');
+          expResultBox.innerHTML = '';
+          delete expResultBox.dataset.beautified;
+          if (modalTitle) modalTitle.textContent = 'Ekspor Video MP4';
+        });
+        card.appendChild(btnReExport);
         
         // Bersihkan teks mentah lama & masukkan kartu baru
         expResultBox.innerHTML = '';
         expResultBox.appendChild(card);
         
-        // Scroll modal secara halus agar user langsung melihat tombol unduh
+        // Scroll modal ke paling atas agar seluruh tampilan kartu video & tombol download pas di layar
         setTimeout(() => {
-          if (exportModal) exportModal.scrollTo({ top: exportModal.scrollHeight, behavior: 'smooth' });
-        }, 150);
+          if (exportModal) exportModal.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 100);
       }
     };
 
@@ -2119,6 +2170,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reset flag saat tombol ekspor baru ditekan
     byId('expStart')?.addEventListener('click', () => {
       delete expResultBox.dataset.beautified;
+      byId('pane-ekspor')?.classList.remove('export-done');
+      const modalTitle = byId('expModalTitle');
+      if (modalTitle) modalTitle.textContent = 'Ekspor Video MP4';
     });
   }
 

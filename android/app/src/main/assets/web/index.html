@@ -733,11 +733,65 @@
             </label>
           </div>
 
-          <div class="welcome-status" id="welcomeStatus" hidden>
-            <div class="busy-spinner sm" id="welcomeSpinner"></div>
+          <div class="welcome-status y2k-cyber-scanner" id="welcomeStatus" hidden>
+            <!-- Laser Scan Beam Effect -->
+            <div class="cyber-scan-beam" aria-hidden="true"></div>
+
+            <!-- Cyber Header Tag -->
+            <div class="cyber-status-header">
+              <div class="cyber-terminal-badge">
+                <span class="cyber-badge-dot"></span>
+                <span class="cyber-badge-text">ALIGHT CLOUD STREAM // v2.0</span>
+              </div>
+              <div class="cyber-freq-indicator" aria-hidden="true">
+                <span class="freq-bar"></span>
+                <span class="freq-bar"></span>
+                <span class="freq-bar"></span>
+                <span class="freq-bar"></span>
+              </div>
+            </div>
+
+            <!-- Core Hologram Radar Orbit -->
+            <div class="cyber-core-wrap">
+              <div class="cyber-radar-ring" aria-hidden="true">
+                <div class="radar-sweep"></div>
+                <div class="radar-dot dot-1"></div>
+                <div class="radar-dot dot-2"></div>
+              </div>
+              <div class="cyber-center-icon">
+                <svg viewBox="0 0 24 24" class="cyber-am-svg">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Dynamic Status Typography -->
             <div class="ws-text">
-              <div class="ws-title" id="welcomeStatusTitle"></div>
-              <div class="ws-desc" id="welcomeStatusDesc"></div>
+              <div class="ws-title" id="welcomeStatusTitle">Memproses link Alight Motion...</div>
+              <div class="ws-desc" id="welcomeStatusDesc">Menghubungkan ke cloud server...</div>
+            </div>
+
+            <!-- Neon Progress Tube / Data Streamer -->
+            <div class="cyber-progress-tube" id="cyberProgressTube" aria-hidden="true">
+              <div class="tube-glow-fill"></div>
+            </div>
+
+            <!-- 3-Step Cyber Pipeline Matrix -->
+            <div class="cyber-pipeline-steps" aria-hidden="true">
+              <div class="pipe-step step-1 active" id="pipeStep1">
+                <span class="step-num">01</span>
+                <span class="step-label">LINK DETECT</span>
+              </div>
+              <div class="pipe-divider">▸</div>
+              <div class="pipe-step step-2" id="pipeStep2">
+                <span class="step-num">02</span>
+                <span class="step-label">CLOUD FETCH</span>
+              </div>
+              <div class="pipe-divider">▸</div>
+              <div class="pipe-step step-3" id="pipeStep3">
+                <span class="step-num">03</span>
+                <span class="step-label">WEBGL READY</span>
+              </div>
             </div>
           </div>
         </section>
