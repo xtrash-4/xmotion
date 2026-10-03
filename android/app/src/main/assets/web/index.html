@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&family=VT323&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="style-simple.css?v=33">
+  <link rel="stylesheet" href="style-simple.css?v=34">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2308090c' stroke='%23383e4a' stroke-width='2'/%3E%3Cpath d='M9 9 L23 23 M23 9 L9 23' stroke='%23f1f3f7' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -598,13 +598,56 @@
             
             <button type="button" id="expCancel" class="btn-action chrome-ghost sm" style="display:none; margin-top:8px;">Batal Render</button>
 
-            <!-- Progress Indicator -->
-            <div class="export-progress-wrap" id="exportProgressBox" style="display:none;">
-              <div class="progress-info-row">
-                <span id="expStats">Memproses frame video...</span>
-                <span class="pct-num" id="expPctNum">0%</span>
+            <!-- Progress Indicator (Y2K Cyber Aero Video Rendering HUD) -->
+            <div class="export-progress-wrap y2k-render-hud" id="exportProgressBox" style="display:none;">
+              <!-- Header HUD -->
+              <div class="render-hud-head">
+                <div class="render-live-tag">
+                  <span class="live-pulse-dot"></span>
+                  <span class="live-tag-text">RENDERING VIDEO MP4</span>
+                </div>
+                <div class="render-pct-badge" id="expPctNum">0%</div>
               </div>
-              <progress id="expBar" value="0" max="1"></progress>
+
+              <!-- Cyber Tube Progress Bar -->
+              <div class="cyber-tube-wrapper">
+                <progress id="expBar" value="0" max="1" class="cyber-tube-bar"></progress>
+              </div>
+
+              <!-- Hidden raw engine output for data source -->
+              <span id="expStats" style="display:none;" aria-hidden="true">Memproses frame video...</span>
+
+              <!-- Metric Grid HUD (3 Card Info) -->
+              <div class="render-metrics-grid">
+                <div class="metric-card">
+                  <div class="metric-label">
+                    <svg viewBox="0 0 24 24" class="metric-icon"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+                    <span>FRAME</span>
+                  </div>
+                  <div class="metric-val" id="hudFrameVal">0 / 0</div>
+                </div>
+
+                <div class="metric-card">
+                  <div class="metric-label">
+                    <svg viewBox="0 0 24 24" class="metric-icon"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span>KECEPATAN</span>
+                  </div>
+                  <div class="metric-val" id="hudSpeedVal">0 FPS</div>
+                </div>
+
+                <div class="metric-card">
+                  <div class="metric-label">
+                    <svg viewBox="0 0 24 24" class="metric-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>ESTIMASI</span>
+                  </div>
+                  <div class="metric-val" id="hudEtaVal">Menghitung...</div>
+                </div>
+              </div>
+
+              <div class="render-sub-hint">
+                <span class="render-spinner-ring"></span>
+                <span id="hudSubHintText">Akselerasi GPU WebCodecs 60 FPS Aktif</span>
+              </div>
             </div>
 
             <!-- Download Result Box -->
@@ -970,7 +1013,7 @@
 
   <!-- Load WebGL Engine & Custom Simple Studio Controller -->
   <script type="module" src="./runtime/assets/preset-VCGEVJ32.js"></script>
-  <script src="./app-simple.js?v=40"></script>
+  <script src="./app-simple.js?v=41"></script>
 </body>
 
 </html>

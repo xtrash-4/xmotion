@@ -710,15 +710,115 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 6. PROGRESS BAR OBSERVER (Update % Text during Export)
+  // 6. PROGRESS BAR OBSERVER (Real-time Y2K Cyber Aero Rendering HUD)
   const expBar = document.getElementById('expBar');
   const exportProgressBox = document.getElementById('exportProgressBox');
   const expPctNum = document.getElementById('expPctNum');
   const expStart = document.getElementById('expStart');
+  const expCancel = document.getElementById('expCancel');
+  const expStats = document.getElementById('expStats');
+  const hudFrameVal = document.getElementById('hudFrameVal');
+  const hudSpeedVal = document.getElementById('hudSpeedVal');
+  const hudEtaVal = document.getElementById('hudEtaVal');
+  const hudSubHintText = document.getElementById('hudSubHintText');
+
+  // Simpan HTML asli tombol ekspor
+  const originalExpStartHtml = expStart ? expStart.innerHTML : '';
+
+  // Controller state rendering ekspor (tersedia secara global)
+  window.__setExportRenderingState = (isRendering) => {
+    if (expStart) {
+      if (isRendering) {
+        expStart.classList.add('is-rendering');
+        expStart.disabled = true;
+        expStart.innerHTML = `
+          <span class="render-spinner-ring" style="width:16px;height:16px;border-width:2.5px;margin-right:6px;"></span>
+          <span>SEDANG MERENDER VIDEO...</span>
+        `;
+      } else {
+        expStart.classList.remove('is-rendering');
+        expStart.disabled = false;
+        expStart.innerHTML = originalExpStartHtml || `
+          <svg class="i-btn lg"><use xlink:href="#i-download"></use></svg>
+          <span>GENERATE VIDEO MP4 SEKARANG</span>
+        `;
+      }
+    }
+    if (expCancel) {
+      expCancel.style.display = isRendering ? 'block' : 'none';
+    }
+  };
+
+  // Parser data real-time dari engine Alight Motion
+  const parseEngineExportStats = (raw) => {
+    if (!raw || typeof raw !== 'string') return;
+    const text = raw.trim();
+    if (!text) return;
+
+    // 1. Ekstrak info frame: "frame 90/1682"
+    const frameMatch = text.match(/frame\s+([0-9]+)\s*\/\s*([0-9]+)/i);
+    if (frameMatch) {
+      const cur = parseInt(frameMatch[1], 10);
+      const tot = parseInt(frameMatch[2], 10);
+      if (hudFrameVal) {
+        hudFrameVal.textContent = `${cur} / ${tot}`;
+      }
+      if (tot > 0 && expBar) {
+        expBar.max = tot;
+        expBar.value = cur;
+        const pct = Math.min(100, Math.round((cur / tot) * 100));
+        if (expPctNum) expPctNum.textContent = `${pct}%`;
+      }
+    }
+
+    // 2. Ekstrak persen: "(5.4%)"
+    const pctMatch = text.match(/\(([0-9.]+)%\)/);
+    if (pctMatch && expPctNum && (!frameMatch || !hudFrameVal)) {
+      expPctNum.textContent = `${Math.round(parseFloat(pctMatch[1]))}%`;
+    }
+
+    // 3. Ekstrak kecepatan render FPS: "render 27.1 fps" atau "27.1 fps"
+    const fpsMatch = text.match(/render\s+([0-9.]+)\s*fps/i) || text.match(/([0-9.]+)\s*fps/i);
+    if (fpsMatch && hudSpeedVal) {
+      hudSpeedVal.textContent = `${fpsMatch[1]} FPS`;
+    }
+
+    // 4. Ekstrak ETA sisa waktu: "ETA 59s" atau "ETA 2m 16s"
+    const etaMatch = text.match(/ETA\s+([0-9a-z\s]+)/i);
+    if (etaMatch && hudEtaVal) {
+      let etaStr = etaMatch[1].trim();
+      etaStr = etaStr.replace(/s$/i, ' dtk').replace(/m\s*/i, 'm ');
+      hudEtaVal.textContent = etaStr;
+    }
+
+    // 5. Ekstrak tahapan status render
+    if (hudSubHintText) {
+      if (/audio/i.test(text)) {
+        hudSubHintText.textContent = 'Memproses trek audio & encoding AAC...';
+      } else if (/frame/i.test(text)) {
+        hudSubHintText.textContent = 'Akselerasi GPU WebCodecs 60 FPS Aktif';
+      } else if (/selesai|finish|done/i.test(text)) {
+        hudSubHintText.textContent = 'Menyelesaikan pengemasan berkas MP4...';
+      }
+    }
+  };
 
   if (expStart) {
     expStart.addEventListener('click', () => {
       if (exportProgressBox) exportProgressBox.style.display = 'flex';
+      window.__setExportRenderingState(true);
+      if (hudSubHintText) hudSubHintText.textContent = 'Memulai rendering akselerasi WebCodecs...';
+      if (hudFrameVal) hudFrameVal.textContent = '0 / 0';
+      if (hudSpeedVal) hudSpeedVal.textContent = '0 FPS';
+      if (hudEtaVal) hudEtaVal.textContent = 'Menghitung...';
+      if (expPctNum) expPctNum.textContent = '0%';
+    });
+  }
+
+  if (expCancel) {
+    expCancel.addEventListener('click', () => {
+      window.__setExportRenderingState(false);
+      if (exportProgressBox) exportProgressBox.style.display = 'none';
     });
   }
 
@@ -731,6 +831,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const observer = new MutationObserver(updatePct);
     observer.observe(expBar, { attributes: true, attributeFilter: ['value', 'max'] });
+  }
+
+  // Observer teks log engine Alight Motion (#expStats)
+  if (expStats) {
+    expStats.style.display = 'none';
+    const statsObserver = new MutationObserver(() => {
+      parseEngineExportStats(expStats.textContent);
+    });
+    statsObserver.observe(expStats, { childList: true, characterData: true, subtree: true });
   }
 
   // 7. IMPOR PRESET DARI LINK ALIGHT MOTION (alightcreative.com / alight.link)
@@ -2376,11 +2485,45 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="exp-format-info">Format MP4 Full HD • 60 FPS • Audio Jernih</div>
         `;
         
-        // Pindahkan video ke dalam frame proporsional (tinggi terkunci rapi, tidak raksasa)
+        // Matikan state render & sembunyikan HUD progress
+        if (typeof window.__setExportRenderingState === 'function') {
+          window.__setExportRenderingState(false);
+        }
+        const expProgBox = byId('exportProgressBox');
+        if (expProgBox) expProgBox.style.display = 'none';
+
+        // Pindahkan video ke dalam frame proporsional pas (tanpa celah hitam di samping)
         const videoFrame = document.createElement('div');
         videoFrame.className = 'exp-video-frame';
         vid.controls = true;
         vid.setAttribute('playsinline', 'true');
+
+        const applyVidAspect = () => {
+          const vw = vid.videoWidth || (vid.naturalWidth || 0);
+          const vh = vid.videoHeight || (vid.naturalHeight || 0);
+          if (vw > 0 && vh > 0) {
+            const ratioStr = `${vw} / ${vh}`;
+            videoFrame.style.aspectRatio = ratioStr;
+            vid.style.aspectRatio = ratioStr;
+            if (vh > vw) {
+              // Video portrait (9:16)
+              videoFrame.style.maxHeight = '38vh';
+              videoFrame.style.width = 'auto';
+            } else {
+              // Video landscape / square
+              videoFrame.style.maxWidth = '300px';
+              videoFrame.style.width = '100%';
+            }
+          }
+        };
+
+        if (vid.videoWidth && vid.videoHeight) {
+          applyVidAspect();
+        } else {
+          vid.addEventListener('loadedmetadata', applyVidAspect, { once: true });
+          vid.addEventListener('canplay', applyVidAspect, { once: true });
+        }
+
         videoFrame.appendChild(vid);
         card.appendChild(videoFrame);
         
@@ -2418,6 +2561,11 @@ document.addEventListener('DOMContentLoaded', () => {
           expResultBox.innerHTML = '';
           delete expResultBox.dataset.beautified;
           if (modalTitle) modalTitle.textContent = 'Ekspor Video MP4';
+          if (typeof window.__setExportRenderingState === 'function') {
+            window.__setExportRenderingState(false);
+          }
+          const expProgBox = byId('exportProgressBox');
+          if (expProgBox) expProgBox.style.display = 'none';
         });
         card.appendChild(btnReExport);
         
