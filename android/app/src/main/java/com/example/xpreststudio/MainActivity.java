@@ -135,9 +135,9 @@ public class MainActivity extends Activity {
                 String host = uri.getHost();
                 String path = uri.getPath();
 
-                if (host != null && host.equalsIgnoreCase(APP_HOST)) {
+                if (host != null) {
                     // 1. Muat aset lokal (HTML, CSS, JS, Fonts, Shaders) langsung dari storage internal APK (0 detik)
-                    if (path != null && path.startsWith("/assets/")) {
+                    if (host.equalsIgnoreCase(APP_HOST) && path != null && path.startsWith("/assets/")) {
                         WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
                         if (response != null) {
                             return response;
@@ -145,7 +145,8 @@ public class MainActivity extends Activity {
                     }
 
                     // 2. Teruskan request API / media ke server backend Render secara transparan
-                    if (path != null && (path.startsWith("/api/") || path.startsWith("/effects/") || path.startsWith("/runtime/effects/") || path.endsWith(".m4a") || path.endsWith(".mp3"))) {
+                    if ((host.equalsIgnoreCase(APP_HOST) || host.contains("onrender.com")) && path != null &&
+                            (path.startsWith("/api/") || path.startsWith("/effects/") || path.startsWith("/runtime/effects/") || path.endsWith(".m4a") || path.endsWith(".mp3"))) {
                         String remoteTarget = REMOTE_BACKEND_URL + path + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
                         return proxyRemoteRequest(request, remoteTarget);
                     }
@@ -307,8 +308,8 @@ public class MainActivity extends Activity {
             java.net.URL url = new java.net.URL(targetUrl);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
             conn.setRequestMethod(request.getMethod());
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(60000);
+            conn.setConnectTimeout(25000);
+            conn.setReadTimeout(90000);
             conn.setInstanceFollowRedirects(true);
 
             java.util.Map<String, String> headers = request.getRequestHeaders();
@@ -323,6 +324,10 @@ public class MainActivity extends Activity {
 
             int responseCode = conn.getResponseCode();
             java.io.InputStream stream = (responseCode >= 400) ? conn.getErrorStream() : conn.getInputStream();
+            if (stream == null) {
+                stream = new java.io.ByteArrayInputStream("{}".getBytes("utf-8"));
+            }
+
             String contentType = conn.getContentType();
             String mimeType = "application/octet-stream";
             String encoding = "utf-8";
@@ -344,10 +349,34 @@ public class MainActivity extends Activity {
             responseHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
             responseHeaders.put("Access-Control-Allow-Headers", "*");
 
+            // Untuk respon API / JSON, buffer payload secara komplit agar tidak terjadi pemotongan stream (Unexpected end of JSON)
+            if (mimeType.contains("json") || targetUrl.contains("/api/")) {
+                java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                byte[] temp = new byte[8192];
+                int read;
+                while ((read = stream.read(temp)) != -1) {
+                    buffer.write(temp, 0, read);
+                }
+                byte[] bytes = buffer.toByteArray();
+                if (bytes.length == 0 && responseCode >= 400) {
+                    bytes = "{\"error\": \"Gagal menghubungi server cloud.\"}".getBytes("utf-8");
+                }
+                return new WebResourceResponse(mimeType, encoding, responseCode, conn.getResponseMessage(), responseHeaders, new java.io.ByteArrayInputStream(bytes));
+            }
+
             return new WebResourceResponse(mimeType, encoding, responseCode, conn.getResponseMessage(), responseHeaders, stream);
         } catch (Exception e) {
             Log.w("XEDITZ_PROXY", "Proxy fallback error for " + targetUrl + ": " + e.getMessage());
-            return null;
+            String safeMsg = (e.getMessage() != null) ? e.getMessage().replace("\"", "'") : "Timeout";
+            String errJson = "{\"error\": \"Koneksi internet bermasalah atau server cloud sedang bersiap (" + safeMsg + "). Silakan coba lagi.\"}";
+            try {
+                java.util.Map<String, String> errHeaders = new java.util.HashMap<>();
+                errHeaders.put("Access-Control-Allow-Origin", "*");
+                errHeaders.put("Content-Type", "application/json");
+                return new WebResourceResponse("application/json", "utf-8", 503, "Service Unavailable", errHeaders, new java.io.ByteArrayInputStream(errJson.getBytes("utf-8")));
+            } catch (Exception ex) {
+                return null;
+            }
         }
     }
 

@@ -173,7 +173,9 @@ window.__API_BASE = localStorage.getItem('XPREST_API_BASE') || ((location.protoc
     try {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       if (res.ok && url.includes('/api/project-xml')) {
-        const data = await res.clone().json();
+        const cloned = res.clone();
+        const text = await cloned.text();
+        const data = text ? JSON.parse(text) : null;
         if (data && typeof data.xml === 'string') {
           const fixed = fixPathRectMediaShapes(data.xml);
           registerXmlMediaUsage(fixed.xml, [data.xmlName]);
@@ -602,8 +604,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (resp.ok) {
-          const data = await resp.json();
-          if (data.url) {
+          let data = null;
+          try {
+            const text = await resp.text();
+            data = text ? JSON.parse(text) : null;
+          } catch (_) {}
+          if (data && data.url) {
             const audioFetch = await fetch(data.url);
             const audioBlob = await audioFetch.blob();
             const extractedFile = new File([audioBlob], data.filename || 'extracted_audio.mp3', { type: 'audio/mp3' });
@@ -657,10 +663,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         const resp = await fetch(`/api/tiktok?url=${encodeURIComponent(tiktokUrl)}`);
-        const data = await resp.json();
+        let data = null;
+        try {
+          const text = await resp.text();
+          data = text ? JSON.parse(text) : null;
+        } catch (_) {}
 
-        if (!resp.ok || data.error) {
-          throw new Error(data.error || 'Gagal mengambil audio TikTok.');
+        if (!resp.ok || !data || data.error) {
+          throw new Error((data && data.error) || 'Gagal mengambil audio TikTok. Pastikan video publik.');
         }
 
         // Download audio and inject to engine
@@ -835,10 +845,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showAmStatus('loading', 'Mengunduh paket Alight Motion...', 'Sedang mendeteksi & mengunduh berkas preset dari cloud...');
         const resp = await fetch(`/api/project-xml?${query}`);
-        const data = await resp.json();
+        let data = null;
+        try {
+          const text = await resp.text();
+          data = text ? JSON.parse(text) : null;
+        } catch (parseErr) {
+          console.warn('[AM Parse Warning]', parseErr);
+        }
 
-        if (!resp.ok || data.error) {
-          throw new Error(data.error || 'Gagal mengunduh paket dari link Alight Motion.');
+        if (!resp.ok || !data || data.error) {
+          const errMsg = (data && data.error)
+            ? data.error
+            : (resp.status === 502 || resp.status === 503 || resp.status === 504)
+              ? 'Server cloud sedang bersiap / antrean cloud sibuk. Silakan ketuk tombol "Ambil preset" sekali lagi.'
+              : `Gagal memproses link (HTTP ${resp.status}). Periksa koneksi internet atau gunakan opsi upload file XML.`;
+          throw new Error(errMsg);
         }
 
         const projectTitle = data.meta?.title || data.xmlName || 'Alight Motion Preset';

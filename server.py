@@ -967,6 +967,83 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
 
     return result
 
+def _download_am_zervida_fallback(resolved_url: str, project: str = None) -> dict:
+    """
+    Fallback remote ke am.zervida.my.id jika direct Firebase download gagal.
+    Mengambil data proyek, XML, dan daftar media dari perantara yang kompatibel 100%.
+    """
+    clean_url = _resolve_all_redirects(resolved_url)
+    api_url = f"https://am.zervida.my.id/api/project-xml?url={urllib.parse.quote(clean_url)}"
+    if project:
+        api_url += f"&project={urllib.parse.quote(project)}"
+
+    req = urllib.request.Request(api_url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    })
+
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        if resp.status != 200:
+            raise ValueError(f"Zervida API mengembalikan status {resp.status}")
+        raw = resp.read().decode("utf-8")
+        data = json.loads(raw)
+
+    if not data or not data.get("xml"):
+        raise ValueError("Zervida API tidak mengembalikan berkas XML preset yang valid.")
+
+    xml_text = data.get("xml", "")
+    xml_name = data.get("xmlName", "project.xml")
+    package_id = data.get("packageId") or _package_id_from_url(clean_url) or f"am_{uuid.uuid4().hex[:8]}"
+
+    presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
+    os.makedirs(presets_dir, exist_ok=True)
+    with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
+        fp.write(xml_text)
+
+    media_list = data.get("media", [])
+    media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
+    os.makedirs(media_dir, exist_ok=True)
+
+    media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
+        xml_text, media_list, local_media_dir=media_dir
+    )
+
+    fixed_media = []
+    for m in media_list:
+        fname = m.get("name")
+        fixed_media.append({
+            "name": fname,
+            "size": m.get("size", 0),
+            "mime": m.get("mime") or mimetypes.guess_type(fname)[0] or "application/octet-stream",
+            "url": f"/api/link/{package_id}/media/{urllib.parse.quote(fname)}",
+        })
+
+    preset_title = (data.get("meta") or {}).get("title") or f"Alight Motion ({package_id[:8]})"
+
+    result = {
+        "url": clean_url,
+        "xml": xml_text,
+        "xmlName": xml_name,
+        "packageId": package_id,
+        "media": fixed_media,
+        "mediaMap": media_map,
+        "hasAudio": ("<audio" in xml_text),
+        "hasAudioFile": has_audio_file,
+        "missingCloudAudio": missing_cloud_audio,
+        "audioItem": found_audio_item,
+        "meta": data.get("meta") or {
+            "title": preset_title,
+            "description": f"Preset diunduh dari cloud ({len(xml_text):,} karakter XML, {len(fixed_media)} media)."
+        },
+        "projects": data.get("projects") or [{"name": xml_name, "title": preset_title, "characters": len(xml_text)}],
+    }
+
+    _save_package_cache(package_id, project, result)
+    if not project:
+        _save_package_cache(package_id, None, result)
+
+    return result
+
 @app.get("/api/project-xml")
 async def get_project_xml(url: str, project: str = None):
     if not url:
@@ -1006,6 +1083,7 @@ async def get_project_xml(url: str, project: str = None):
     # 4. Link share resmi Alight Motion (alightcreative.com / alight.link)
     if "alightcreative.com" in resolved_url or "alight.link" in resolved_url:
         direct_error = None
+        # Prioritas 1: Download direct dari Firebase Storage Alight Creative
         try:
             async with download_semaphore:
                 data = await asyncio.to_thread(_download_am_direct_package, resolved_url, project)
@@ -1014,15 +1092,25 @@ async def get_project_xml(url: str, project: str = None):
                 return data
         except Exception as e_direct:
             direct_error = str(e_direct)
-            print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({direct_error}), mencoba cache lokal atau remote fallback...")
+            print(f"[project-xml] Unduh direct Firebase Alight Creative gagal ({direct_error}), mencoba remote fallback...")
 
-        # Cek cache offline jika download direct gagal
+        # Prioritas 2: Remote fallback ke perantara yang kompatibel 100% (am.zervida.my.id)
+        try:
+            async with download_semaphore:
+                data = await asyncio.to_thread(_download_am_zervida_fallback, resolved_url, project)
+            if data and data.get("xml"):
+                print(f"[project-xml] Berhasil unduh lewat fallback Zervida untuk {data.get('packageId')}")
+                return data
+        except Exception as e_fallback:
+            print(f"[project-xml] Fallback Zervida gagal ({e_fallback}), mencoba cache lokal...")
+
+        # Prioritas 3: Cek cache offline lokal jika pernah diunduh sebelumnya
         cached = _offline_response(resolved_url, project)
         if cached:
             print(f"[project-xml] Memakai offline cache lokal fallback untuk {_package_id_from_url(resolved_url)}")
             return cached
 
-        # Ambil metadata nama preset untuk pesan error yang ramah
+        # Prioritas 4: Ambil metadata nama preset untuk pesan error yang ramah
         am_meta = await asyncio.to_thread(_get_am_share_metadata, resolved_url)
         preset_title = am_meta.get("title") if am_meta else None
         err_title_str = f"Preset '{preset_title}'" if preset_title else "Link Alight Motion"
