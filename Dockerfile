@@ -24,4 +24,5 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Jalankan server FastAPI dengan membaca port dari environment (otomatis kompatibel dengan Render)
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Batasi ke 1 worker dan 100 konkurensi untuk mengamankan limit 512MB RAM
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 100 --timeout-keep-alive 65"]

@@ -6,6 +6,10 @@ import sys
 import shutil
 import uuid
 import threading
+import time
+import tempfile
+import gc
+import ctypes
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -20,11 +24,67 @@ import zipfile
 import io
 import uvicorn
 
-import render_jj
-import render_jj2
-import render_jj3
-
 app = FastAPI(title="Retro Y2K Jedag-Jedug Studio")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WEB_DIR = os.path.join(BASE_DIR, "web")
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+AUDIO_FILE = os.path.join(BASE_DIR, "audio.m4a")
+
+os.makedirs(WEB_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+_SAFE_NAME = re.compile(r'^[^/\\:*?"<>|\x00]+$')
+TEMP_UPLOAD_PREFIXES = ("audio_extracted_", "tiktok_", "temp_vid_")
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+def safe_name(value: str) -> bool:
+    """Tolak nama file/id yang bisa keluar dari folder (.., slash, backslash)."""
+    return bool(value) and value not in (".", "..") and bool(_SAFE_NAME.match(value))
+
+# =====================================================================
+# MEMORY & CONCURRENCY MANAGEMENT (OPTIMASI KHUSUS RENDER 512MB RAM)
+# =====================================================================
+# Batasi proses berat bersamaan agar server tidak terkena OOM kill saat banyak user
+heavy_task_semaphore = asyncio.Semaphore(2)
+download_semaphore = asyncio.Semaphore(3)
+
+def trim_memory():
+    """Memaksa Python garbage collection dan melepaskan unallocated memory kembali ke OS (Linux glibc)."""
+    try:
+        gc.collect()
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
+
+def cleanup_temp_files():
+    """Hapus berkas temporary lama (> 1 jam) di uploads dan outputs agar disk container tidak membengkak."""
+    now = time.time()
+    for folder in [UPLOADS_DIR, OUTPUT_DIR]:
+        if not os.path.exists(folder):
+            continue
+        try:
+            for fname in os.listdir(folder):
+                fpath = os.path.join(folder, fname)
+                if os.path.isfile(fpath):
+                    if fname.startswith(TEMP_UPLOAD_PREFIXES) or "render_" in fname:
+                        if now - os.path.getmtime(fpath) > 3600:
+                            _remove_quietly(fpath)
+        except Exception:
+            pass
+
+@app.on_event("startup")
+async def on_startup():
+    cleanup_temp_files()
+    trim_memory()
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,17 +104,6 @@ async def add_no_cache_headers(request, call_next):
         response.headers["Expires"] = "0"
     return response
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WEB_DIR = os.path.join(BASE_DIR, "web")
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
-OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
-AUDIO_FILE = os.path.join(BASE_DIR, "audio.m4a")
-
-os.makedirs(WEB_DIR, exist_ok=True)
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
 # Copy default photos to uploads if available
 for f in ["foto1.jpg", "foto2.jpg", "foto3.jpg"]:
     src = os.path.join(BASE_DIR, f)
@@ -70,20 +119,6 @@ render_state = {
     "video_name": "hasil_jedag_jedug.mp4"
 }
 render_lock = threading.Lock()
-
-_SAFE_NAME = re.compile(r'^[^/\\:*?"<>|\x00]+$')
-
-TEMP_UPLOAD_PREFIXES = ("audio_extracted_", "tiktok_", "temp_vid_")
-
-def _remove_quietly(path: str) -> None:
-    try:
-        os.remove(path)
-    except OSError:
-        pass
-
-def safe_name(value: str) -> bool:
-    """Tolak nama file/id yang bisa keluar dari folder (.., slash, backslash)."""
-    return bool(value) and value not in (".", "..") and bool(_SAFE_NAME.match(value))
 
 @app.get("/audio")
 @app.get("/audio.m4a")
@@ -189,64 +224,95 @@ async def get_tiktok_audio(url: str):
     if not url:
         return JSONResponse({"error": "Parameter url wajib diisi."}, status_code=400)
     
-    # 1. Try remote TikTok API first
-    try:
-        api_url = "https://am.zervida.my.id/api/tiktok?" + urllib.parse.urlencode({"url": url})
-        req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            media_url = data.get("media")
-            if media_url:
-                out_name = f"tiktok_{uuid.uuid4().hex[:8]}.mp3"
-                dest = os.path.join(UPLOADS_DIR, out_name)
-                m_req = urllib.request.Request(media_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(m_req, timeout=15) as m_resp, open(dest, "wb") as fp:
-                    shutil.copyfileobj(m_resp, fp)
-                return {
-                    "success": True,
-                    "url": f"/api/photos/{out_name}",
-                    "media": f"/api/photos/{out_name}",
-                    "filename": out_name
-                }
-    except Exception as e:
-        print("[TikTok API] Remote scraper error:", e)
+    async with heavy_task_semaphore:
+        try:
+            # 1. Coba remote scraper API terlebih dahulu (sangat ringan RAM)
+            try:
+                api_url = "https://am.zervida.my.id/api/tiktok?" + urllib.parse.urlencode({"url": url})
+                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    media_url = data.get("media")
+                    if media_url:
+                        out_name = f"tiktok_{uuid.uuid4().hex[:8]}.mp3"
+                        dest = os.path.join(UPLOADS_DIR, out_name)
+                        m_req = urllib.request.Request(media_url, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(m_req, timeout=15) as m_resp, open(dest, "wb") as fp:
+                            shutil.copyfileobj(m_resp, fp, length=64 * 1024)
+                        return {
+                            "success": True,
+                            "url": f"/api/photos/{out_name}",
+                            "media": f"/api/photos/{out_name}",
+                            "filename": out_name
+                        }
+            except Exception as e:
+                print("[TikTok API] Remote scraper error:", e)
 
-    # 2. Fallback to local yt-dlp
-    try:
-        out_name = f"tiktok_{uuid.uuid4().hex[:8]}"
-        dest_tpl = os.path.join(UPLOADS_DIR, f"{out_name}.%(ext)s")
-        cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2 -b:a 192k", "-o", dest_tpl, url]
-        res = subprocess.run(cmd, capture_output=True, timeout=30)
-        final_file = os.path.join(UPLOADS_DIR, f"{out_name}.mp3")
-        if os.path.exists(final_file):
-            return {
-                "success": True,
-                "url": f"/api/photos/{out_name}.mp3",
-                "media": f"/api/photos/{out_name}.mp3",
-                "filename": f"{out_name}.mp3"
-            }
-    except Exception as e2:
-        print("[TikTok API] yt-dlp error:", e2)
+            # 2. Fallback ke local yt-dlp (hemat RAM & bandwidth: hanya ambil audio stream, max 30MB)
+            try:
+                out_name = f"tiktok_{uuid.uuid4().hex[:8]}"
+                dest_tpl = os.path.join(UPLOADS_DIR, f"{out_name}.%(ext)s")
+                cmd = [
+                    "yt-dlp",
+                    "--no-playlist",
+                    "--max-filesize", "30M",
+                    "-f", "ba/b",
+                    "-x", "--audio-format", "mp3",
+                    "--postprocessor-args", "ffmpeg:-threads 1 -ar 44100 -ac 2 -b:a 192k",
+                    "-o", dest_tpl,
+                    url
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=45)
+                final_file = os.path.join(UPLOADS_DIR, f"{out_name}.mp3")
+                if os.path.exists(final_file):
+                    return {
+                        "success": True,
+                        "url": f"/api/photos/{out_name}.mp3",
+                        "media": f"/api/photos/{out_name}.mp3",
+                        "filename": f"{out_name}.mp3"
+                    }
+            except Exception as e2:
+                print("[TikTok API] yt-dlp error:", e2)
 
-    return JSONResponse({"error": "Gagal mengambil audio dari link TikTok tersebut. Pastikan link publik."}, status_code=500)
+            return JSONResponse({"error": "Gagal mengambil audio dari link TikTok tersebut. Pastikan link publik."}, status_code=500)
+        finally:
+            trim_memory()
 
 @app.post("/api/extract-audio")
 async def extract_audio_api(video: UploadFile = File(...)):
-    try:
-        ext = os.path.splitext(video.filename)[1].lower() or ".mp4"
-        temp_vid = os.path.join(UPLOADS_DIR, f"temp_vid_{uuid.uuid4().hex[:8]}{ext}")
-        out_name = f"audio_extracted_{uuid.uuid4().hex[:8]}.mp3"
-        out_path = os.path.join(UPLOADS_DIR, out_name)
-        with open(temp_vid, "wb") as buffer:
-            shutil.copyfileobj(video.file, buffer)
-        cmd = ["ffmpeg", "-y", "-i", temp_vid, "-vn", "-c:a", "libmp3lame", "-ar", "44100", "-ac", "2", "-b:a", "192k", out_path]
-        subprocess.run(cmd, capture_output=True)
-        if os.path.exists(temp_vid):
-            os.remove(temp_vid)
-        if os.path.exists(out_path):
-            return {"success": True, "url": f"/api/photos/{out_name}", "filename": out_name}
-    except Exception as e:
-        print("Extract audio error:", e)
+    async with heavy_task_semaphore:
+        temp_vid = None
+        try:
+            ext = os.path.splitext(video.filename)[1].lower() or ".mp4"
+            temp_vid = os.path.join(UPLOADS_DIR, f"temp_vid_{uuid.uuid4().hex[:8]}{ext}")
+            out_name = f"audio_extracted_{uuid.uuid4().hex[:8]}.mp3"
+            out_path = os.path.join(UPLOADS_DIR, out_name)
+            
+            # Stream upload langsung ke disk (64KB chunks) tanpa menumpuk di RAM
+            with open(temp_vid, "wb") as buffer:
+                shutil.copyfileobj(video.file, buffer, length=64 * 1024)
+            
+            # Ekstrak audio via ffmpeg dengan 1 thread untuk menjaga memori & CPU tetap adil di Render
+            cmd = [
+                "ffmpeg", "-y", "-threads", "1",
+                "-i", temp_vid,
+                "-vn", "-c:a", "libmp3lame",
+                "-ar", "44100", "-ac", "2", "-b:a", "192k",
+                out_path
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=60)
+            
+            if os.path.exists(temp_vid):
+                _remove_quietly(temp_vid)
+            if os.path.exists(out_path):
+                return {"success": True, "url": f"/api/photos/{out_name}", "filename": out_name}
+        except Exception as e:
+            print("Extract audio error:", e)
+        finally:
+            if temp_vid and os.path.exists(temp_vid):
+                _remove_quietly(temp_vid)
+            trim_memory()
+            
     return JSONResponse({"error": "Gagal mengekstrak audio dari video."}, status_code=500)
 
 @app.get("/effect-index.json")
@@ -782,81 +848,95 @@ def _download_am_direct_package(url: str, project: str = None) -> dict:
     if not target_url:
         raise ValueError(f"Tidak dapat menemukan berkas preset di cloud Alight Motion untuk package {package_id}. Link mungkin telah kedaluwarsa atau berkas telah dihapus oleh pemilik aslinya.")
 
-    # Unduh berkas dengan chunking buffer 128KB dan timeout memadai (180 detik)
-    print(f"[direct-am] Mengunduh {target_name} dari cloud...", flush=True)
+    # Unduh berkas dengan streaming langsung ke temporary file di disk (RAM < 1MB)
+    print(f"[direct-am] Mengunduh {target_name} dari cloud (stream ke disk)...", flush=True)
     req_dl = urllib.request.Request(target_url, headers=headers_dl)
-    downloaded_buf = bytearray()
-    with urllib.request.urlopen(req_dl, timeout=180) as resp_dl:
-        while True:
-            chunk = resp_dl.read(128 * 1024)
-            if not chunk:
-                break
-            downloaded_buf.extend(chunk)
-
-    downloaded_data = bytes(downloaded_buf)
-    downloaded_type = target_type
-    used_filename = target_name
-    print(f"[direct-am] Selesai unduh {used_filename} ({len(downloaded_data):,} bytes)")
 
     presets_dir = os.path.join(WEB_DIR, "runtime", "presets")
     os.makedirs(presets_dir, exist_ok=True)
     media_dir = os.path.join(WEB_DIR, "runtime", "media", package_id)
     os.makedirs(media_dir, exist_ok=True)
 
-    if downloaded_type == "zip":
-        with zipfile.ZipFile(io.BytesIO(downloaded_data)) as zf:
-            infolist = zf.infolist()
-            xml_candidates = [info for info in infolist if info.filename.lower().endswith(".xml")]
-            if not xml_candidates:
-                raise ValueError("Paket ZIP tidak berisi berkas deskripsi XML scene.")
+    # Gunakan temporary file di disk, bukan menampung seluruh ZIP di RAM
+    temp_fd, temp_zip_path = tempfile.mkstemp(suffix=f"_{target_name}", prefix=f"am_{package_id[:6]}_")
+    os.close(temp_fd)
 
-            xml_candidates.sort(key=lambda info: info.file_size, reverse=True)
-            main_xml_info = xml_candidates[0]
-            xml_name = main_xml_info.filename
-            xml_text = zf.read(xml_name).decode("utf-8", errors="replace")
+    try:
+        total_dl = 0
+        with urllib.request.urlopen(req_dl, timeout=180) as resp_dl, open(temp_zip_path, "wb") as fp_zip:
+            while True:
+                chunk = resp_dl.read(64 * 1024)
+                if not chunk:
+                    break
+                fp_zip.write(chunk)
+                total_dl += len(chunk)
 
-            m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
-            preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
+        print(f"[direct-am] Selesai unduh {target_name} ({total_dl:,} bytes) aman di disk.")
 
+        if target_type == "zip":
+            with zipfile.ZipFile(temp_zip_path, "r") as zf:
+                infolist = zf.infolist()
+                xml_candidates = [info for info in infolist if info.filename.lower().endswith(".xml")]
+                if not xml_candidates:
+                    raise ValueError("Paket ZIP tidak berisi berkas deskripsi XML scene.")
+
+                xml_candidates.sort(key=lambda info: info.file_size, reverse=True)
+                main_xml_info = xml_candidates[0]
+                xml_name = main_xml_info.filename
+
+                # Baca teks XML scene dari ZIP via stream
+                with zf.open(main_xml_info) as xml_fp:
+                    xml_text = xml_fp.read().decode("utf-8", errors="replace")
+
+                m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+                preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
+
+                with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
+                    fp.write(xml_text)
+
+                media_list = []
+                for info in infolist:
+                    fn = info.filename
+                    if fn.endswith("/"):
+                        continue
+                    base_fn = os.path.basename(fn)
+                    dest_media = os.path.join(media_dir, base_fn)
+                    
+                    # Stream ekstrak langsung dari ZIP ke file tujuan (buffer 64KB, RAM hemat)
+                    with zf.open(info) as src_fp, open(dest_media, "wb") as dst_fp:
+                        shutil.copyfileobj(src_fp, dst_fp, length=64 * 1024)
+
+                    mime, _ = mimetypes.guess_type(base_fn)
+                    media_list.append({
+                        "name": base_fn,
+                        "size": info.file_size,
+                        "mime": mime or "application/octet-stream",
+                        "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
+                    })
+
+                media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
+                    xml_text, media_list, local_media_dir=media_dir
+                )
+        else:
+            # Tipe berkas adalah XML langsung (XML-Only preset)
+            with open(temp_zip_path, "r", encoding="utf-8", errors="replace") as fp_xml:
+                xml_text = fp_xml.read()
+            if "<scene" not in xml_text and "<?xml" not in xml_text:
+                raise ValueError("Berkas yang diunduh bukan XML preset Alight Motion yang valid.")
+            xml_name = f"project_{package_id}.xml"
             with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
                 fp.write(xml_text)
-
+            m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
+            preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
             media_list = []
-            for info in infolist:
-                fn = info.filename
-                if fn.endswith("/"):
-                    continue
-                base_fn = os.path.basename(fn)
-                dest_media = os.path.join(media_dir, base_fn)
-                with open(dest_media, "wb") as fp:
-                    fp.write(zf.read(fn))
-
-                mime, _ = mimetypes.guess_type(base_fn)
-                media_list.append({
-                    "name": base_fn,
-                    "size": info.file_size,
-                    "mime": mime or "application/octet-stream",
-                    "url": f"/api/link/{package_id}/media/{urllib.parse.quote(base_fn)}",
-                })
-
-            media_map, found_audio_item, has_audio_file, missing_cloud_audio = _extract_media_map_and_audio(
-                xml_text, media_list, local_media_dir=media_dir
-            )
-    else:
-        # Tipe berkas adalah XML langsung (XML-Only preset)
-        xml_text = downloaded_data.decode("utf-8", errors="replace")
-        if "<scene" not in xml_text and "<?xml" not in xml_text:
-            raise ValueError("Berkas yang diunduh bukan XML preset Alight Motion yang valid.")
-        xml_name = f"project_{package_id}.xml"
-        with open(os.path.join(presets_dir, xml_name), "w", encoding="utf-8") as fp:
-            fp.write(xml_text)
-        m_title = re.search(r'<scene[^>]*title="([^"]+)"', xml_text)
-        preset_title = m_title.group(1) if m_title else (scraped_title or f"Alight Motion Preset ({package_id[:8]})")
-        media_list = []
-        media_map = {}
-        found_audio_item = None
-        has_audio_file = False
-        missing_cloud_audio = ("<audio" in xml_text)
+            media_map = {}
+            found_audio_item = None
+            has_audio_file = False
+            missing_cloud_audio = ("<audio" in xml_text)
+    finally:
+        if os.path.exists(temp_zip_path):
+            _remove_quietly(temp_zip_path)
+        trim_memory()
 
     result = {
         "url": clean_url,
@@ -922,7 +1002,8 @@ async def get_project_xml(url: str, project: str = None):
     if "alightcreative.com" in resolved_url or "alight.link" in resolved_url:
         direct_error = None
         try:
-            data = await asyncio.to_thread(_download_am_direct_package, resolved_url, project)
+            async with download_semaphore:
+                data = await asyncio.to_thread(_download_am_direct_package, resolved_url, project)
             if data and data.get("xml"):
                 print(f"[project-xml] Berhasil unduh langsung dari Firebase untuk {data.get('packageId')}")
                 return data
@@ -1035,6 +1116,7 @@ def run_render_task(foto1_name: str, foto2_name: str, foto3_name: str = None, cr
                 render_state["progress"] = pct
 
         if preset == "3":
+            import render_jj3
             render_jj3.render_full_video3(
                 foto1_path=p1,
                 foto2_path=p2,
@@ -1044,6 +1126,7 @@ def run_render_task(foto1_name: str, foto2_name: str, foto3_name: str = None, cr
                 crop_configs=crop_configs
             )
         elif preset == "2":
+            import render_jj2
             render_jj2.render_full_video2(
                 foto1_path=p1,
                 foto2_path=p2,
@@ -1053,6 +1136,7 @@ def run_render_task(foto1_name: str, foto2_name: str, foto3_name: str = None, cr
                 crop_configs=crop_configs
             )
         else:
+            import render_jj
             render_jj.render_full_video(
                 foto1_path=p1,
                 foto2_path=p2,
@@ -1076,6 +1160,8 @@ def run_render_task(foto1_name: str, foto2_name: str, foto3_name: str = None, cr
             render_state["status"] = "error"
             render_state["error"] = str(e)
             print(f"[RenderError] {e}")
+    finally:
+        trim_memory()
 
 @app.post("/api/render")
 async def trigger_render(
