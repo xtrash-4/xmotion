@@ -16,13 +16,27 @@ uploads/
 !audio2.m4a
 !audio3.m4a
 
-# Temporary APK & Testing
+# Temporary APK & Testing & Backups
 *.apk
+*.bak
+*.tmp
+*.swp
+*~
 scratch/
 .playwright-mcp/
 .claude/
 screenshot_*.png
 test_*.png
+
+# Security & Secrets (Strict Protection)
+.env
+.env.*
+*.pem
+*.key
+*.jks
+*.keystore
+*.p12
+*.pfx
 
 # Android build cache (jika folder android ikut dicadangkan)
 android/.gradle/
