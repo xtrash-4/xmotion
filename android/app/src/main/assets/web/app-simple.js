@@ -102,7 +102,7 @@ function isFillMatch(fills, id) {
   return false;
 }
 
-function registerXmlMediaUsage(xmlTexts, names) {
+function registerXmlMediaUsage(xmlTexts, names, preserveSlots = false) {
   try {
     const fills = new Set();
     const base = [];
@@ -130,11 +130,13 @@ function registerXmlMediaUsage(xmlTexts, names) {
     window.__amFillMedia = hasAny ? fills : null;
     window.__amBase = hasAny ? base : null;
     if (hasAny) window.__xmlLoadSeq = (window.__xmlLoadSeq || 0) + 1; // penanda: ada XML valid yang baru diterima
-    // preset baru: semua perubahan pengguna sebelumnya tidak berlaku lagi
-    window.__slotPicked = {};
-    window.__slotFiles = {};
-    window.__textEdits = {};
-    window.__customAudio = null;
+    if (!preserveSlots) {
+      // preset baru: semua perubahan pengguna sebelumnya tidak berlaku lagi
+      window.__slotPicked = {};
+      window.__slotFiles = {};
+      window.__textEdits = {};
+      window.__customAudio = null;
+    }
     if (typeof window.__onXmlRegistered === 'function') window.__onXmlRegistered();
   } catch (err) {
     window.__amFillMedia = null;
@@ -1063,6 +1065,18 @@ document.addEventListener('DOMContentLoaded', () => {
                   await window.AM.applyMedia(slot.id, mFile);
                   window.__slotFiles[slot.id] = mFile;
                   window.__slotPicked[slot.id] = matched.name || cleanId;
+                  const cId = (slot.id || '').replace(/^(amproj:|am:)/, '');
+                  if (cId && cId !== slot.id) {
+                    window.__slotFiles[cId] = mFile;
+                    window.__slotPicked[cId] = matched.name || cleanId;
+                    try {
+                      const dec = decodeURIComponent(cId);
+                      if (dec && dec !== cId) {
+                        window.__slotFiles[dec] = mFile;
+                        window.__slotPicked[dec] = matched.name || cleanId;
+                      }
+                    } catch (_) {}
+                  }
                 }
               } catch (mErr) {
                 console.warn('[Apply Preset Media Warn]', slot.id, mErr);
@@ -1074,6 +1088,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 await window.AM.applyMedia(slot.id, placeholder);
                 window.__slotFiles[slot.id] = placeholder;
                 window.__slotPicked[slot.id] = `Placeholder Slot ${slotIdx}`;
+                const cId = (slot.id || '').replace(/^(amproj:|am:)/, '');
+                if (cId && cId !== slot.id) {
+                  window.__slotFiles[cId] = placeholder;
+                  window.__slotPicked[cId] = `Placeholder Slot ${slotIdx}`;
+                }
               } catch (phErr) {
                 console.warn('[Placeholder Apply Warn]', slot.id, phErr);
               }
@@ -1178,10 +1197,9 @@ document.addEventListener('DOMContentLoaded', () => {
           window.__tidySlots();
         }
 
-        // Daftarkan XML preset aktif agar layer teks dan fill media terbaca ke editor
+        // Render titik-titik penanda ketukan Alight Motion (<bookmark t="..." />) di garis scrubber timeline
         if (data.xml) {
-          registerXmlMediaUsage([data.xml], [projectTitle || 'preset.xml']);
-          renderTimelineBeatBookmarks(data.xml);
+          renderTimelineBeatBookmarks((fixed && fixed.xml) ? fixed.xml : data.xml);
         }
 
         // Trigger render WebGL ke frame awal agar tampilan kanvas langsung berganti foto baru
@@ -1884,16 +1902,71 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Pasang kembali pilihan pengguna: foto/video pengganti, lalu musik kustom
-    for (const [slotId, file] of Object.entries(window.__slotFiles || {})) {
-      try { await window.AM.applyMedia(slotId, file); } catch (err) { console.warn('[Reload] gagal pasang ulang media', slotId, err); }
+    // Pasang kembali pilihan pengguna & media preset asli: foto/video pengganti, lalu musik kustom
+    const activeSlots = (window.AM && typeof window.AM.getMediaSlots === 'function') ? window.AM.getMediaSlots() : [];
+    const restoredSlotIds = new Set();
+
+    // 1. Terapkan berdasarkan kecocokan slot engine aktif
+    for (const s of activeSlots) {
+      if (!s || !s.id) continue;
+      const cleanS = s.id.replace(/^(amproj:|am:)/, '');
+      let baseS = cleanS.split('/').pop();
+      try { baseS = decodeURIComponent(baseS); } catch (_) {}
+
+      let targetFile = window.__slotFiles ? (window.__slotFiles[s.id] || window.__slotFiles[s.name] || window.__slotFiles[cleanS]) : null;
+      if (!targetFile && window.__slotFiles) {
+        try {
+          const decS = decodeURIComponent(cleanS);
+          targetFile = window.__slotFiles[decS];
+        } catch (_) {}
+      }
+      if (!targetFile && window.__slotFiles) {
+        for (const [k, f] of Object.entries(window.__slotFiles)) {
+          const cleanK = k.replace(/^(amproj:|am:)/, '');
+          let baseK = cleanK.split('/').pop();
+          try { baseK = decodeURIComponent(baseK); } catch (_) {}
+          if (cleanK === cleanS || baseK === baseS || k.toLowerCase() === s.id.toLowerCase()) {
+            targetFile = f;
+            break;
+          }
+        }
+      }
+
+      if (targetFile) {
+        try {
+          await window.AM.applyMedia(s.id, targetFile);
+          restoredSlotIds.add(s.id);
+          restoredSlotIds.add(cleanS);
+        } catch (err) {
+          console.warn('[Reload] Gagal pasang media slot aktif:', s.id, err);
+        }
+      }
     }
+
+    // 2. Pasang juga sisa file yang mungkin belum terpasang dari __slotFiles
+    for (const [slotId, file] of Object.entries(window.__slotFiles || {})) {
+      if (!file || restoredSlotIds.has(slotId)) continue;
+      try {
+        await window.AM.applyMedia(slotId, file);
+      } catch (err) {
+        /* ignore slot id format mismatch */
+      }
+    }
+
     if (window.__customAudio) {
       await applyEngineAudio(window.__customAudio);
       await sleep(300);
       await waitEngineIdle();
     }
     updateExportResolutionOptions(rConfig.ratio);
+    if (typeof tidySlots === 'function') tidySlots();
+
+    // Trigger update frame canvas WebGL agar preview langsung sinkron
+    const seekEl = document.getElementById('seek');
+    if (seekEl) {
+      seekEl.dispatchEvent(new Event('input', { bubbles: true }));
+      seekEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   };
 
   // Handler aplikasi rasio preset
