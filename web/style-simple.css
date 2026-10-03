@@ -1680,38 +1680,199 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
-/* Text rows */
+/* ────────── PRESET TEXT EDITOR & BATCH DELETE ────────── */
+.btn-batch-del-texts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff !important;
+  border: 1.5px solid #b91c1c;
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px #991b1b, 0 4px 10px rgba(220, 38, 38, 0.25);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-batch-del-texts:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-batch-del-texts:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #991b1b;
+}
+
+.btn-batch-del-texts.revert-mode {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  border-color: #0369a1;
+  box-shadow: 2px 2px 0px #0369a1;
+}
+
+.btn-batch-del-texts:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+
 .text-rows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  margin-top: 10px;
 }
 
-.text-item-box {
+.text-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-  background: #111317;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  gap: 8px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1.5px solid #bae6fd;
+  border-radius: var(--radius-lg);
+  box-shadow: 3px 3px 0px #bae6fd, 0 4px 12px rgba(2, 132, 199, 0.08);
+  transition: all 0.2s ease;
 }
 
-.text-input-field {
-  width: 100%;
-  background: #0b0c0f;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+.text-row.is-removed {
+  background: #fff1f2;
+  border-color: #fca5a5;
+  box-shadow: 2px 2px 0px #fecdd3;
+  opacity: 0.88;
+}
+
+.text-row.is-edited:not(.is-removed) {
+  border-color: #38bdf8;
+  box-shadow: 3px 3px 0px #38bdf8;
+  background: #f0f9ff;
+}
+
+.text-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.text-idx {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: 0.02em;
+}
+
+.text-time {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.text-time:hover {
+  background: #38bdf8;
   color: #ffffff;
+}
+
+.text-flag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.text-flag.removed {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #f87171;
+}
+
+.text-flag:not(.removed):not(:empty) {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.text-del-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.text-del-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.text-row.is-removed .text-del-btn {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #38bdf8;
+}
+
+.text-input {
+  width: 100%;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  color: #0f172a;
   padding: 8px 12px;
   font-family: var(--font-body);
-  font-size: 0.82rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  resize: vertical;
+  box-sizing: border-box;
   outline: none;
   transition: border-color 0.2s ease;
 }
 
-.text-input-field:focus {
-  border-color: var(--accent-primary);
+.text-input:focus {
+  border-color: #0284c7;
+  background: #ffffff;
+}
+
+.text-row.is-removed .text-input {
+  text-decoration: line-through;
+  color: #94a3b8;
+  background: #f1f5f9;
+  cursor: not-allowed;
+}
+
+/* Teks di dalam grup animasi */
+.text-nested {
+  margin-top: 10px;
+  background: #f8fafc;
+  border: 1.5px dashed #38bdf8;
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+}
+
+.text-nested summary {
+  font-family: var(--font-heading);
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #0284c7;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
 }
 
 .text-actions {

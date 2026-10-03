@@ -1488,11 +1488,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const root = dom.documentElement;
       const total = parseFloat(root.getAttribute('totalTime')) || 0;
       Array.from(dom.getElementsByTagName('text')).forEach((el, ti) => {
-        if (el.getAttribute('hidden') === 'true') return; // sudah disembunyikan oleh pembuat preset
+        // PENTING: Jangan skip jika hidden="true"!
+        // Banyak creator menyisipkan watermark dengan hidden="true" tapi WebGL engine tetap menampilkannya.
+        // Kita data seluruh teks tanpa kecuali agar pengguna bisa menghapus semuanya!
         const content = el.getElementsByTagName('content')[0]?.textContent ?? '';
-        if (!content.trim()) return;
+        const label = el.getAttribute('label') || '';
         out.push({
-          key: `${di}:${ti}`, content, total,
+          key: `${di}:${ti}`,
+          content,
+          label,
+          total,
           nested: el.parentNode !== root,
           start: parseFloat(el.getAttribute('startTime')) || 0,
           end: parseFloat(el.getAttribute('endTime')) || 0
@@ -1518,14 +1523,32 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!textRowsEl) return;
     const items = listTexts();
     const nestedCount = items.filter((i) => i.nested).length;
-    if (textCountEl) textCountEl.textContent = `${items.length - nestedCount} teks`;
+    if (textCountEl) textCountEl.textContent = `${items.length} teks`;
+
+    // Update Tombol Cepat Hapus Semua Teks
+    const btnDeleteAllTexts = document.getElementById('btnDeleteAllTexts');
+    const btnDeleteAllTextsLabel = document.getElementById('btnDeleteAllTextsLabel');
+    const allRemoved = items.length > 0 && items.every((it) => {
+      const e = window.__textEdits[it.key];
+      return e && (e.hidden || (e.content !== undefined && !e.content.trim()));
+    });
+
+    if (btnDeleteAllTexts) {
+      btnDeleteAllTexts.disabled = !items.length;
+      btnDeleteAllTexts.classList.toggle('revert-mode', allRemoved);
+      if (btnDeleteAllTextsLabel) {
+        btnDeleteAllTextsLabel.textContent = allRemoved ? 'Kembalikan Semua Teks' : 'Hapus Semua Teks';
+      }
+    }
+
     if (!items.length) {
       textRowsEl.innerHTML = '<div class="empty-hint">Preset ini tidak punya teks.</div>';
       refreshTextButtons();
       return;
     }
     textRowsEl.innerHTML = '';
-    // Teks di dalam grup animasi (potongan kata/huruf) dilipat agar daftar utama tetap ringkas.
+    
+    // Teks di dalam grup animasi
     let nestedBox = null;
     const ensureNestedBox = () => {
       if (nestedBox) return nestedBox;
@@ -1534,13 +1557,14 @@ document.addEventListener('DOMContentLoaded', () => {
       details.open = nestedOpen;
       details.addEventListener('toggle', () => { nestedOpen = details.open; });
       const summary = document.createElement('summary');
-      summary.textContent = `Teks di dalam grup animasi (${nestedCount})`;
+      summary.textContent = `Teks di dalam grup animasi / sub-layer (${nestedCount})`;
       nestedBox = document.createElement('div');
       nestedBox.className = 'text-rows';
       details.append(summary, nestedBox);
       textRowsEl.appendChild(details);
       return nestedBox;
     };
+
     items.forEach((it, n) => {
       const edit = window.__textEdits[it.key] || {};
       const row = document.createElement('div');
@@ -1551,12 +1575,13 @@ document.addEventListener('DOMContentLoaded', () => {
       head.className = 'text-row-head';
       const idx = document.createElement('span');
       idx.className = 'text-idx';
-      idx.textContent = `Teks ${n + 1}`;
+      idx.textContent = it.label ? `Teks ${n + 1} (${it.label})` : `Teks ${n + 1}`;
+
       const time = document.createElement('button');
       time.type = 'button';
       time.className = 'text-time';
       time.textContent = it.nested ? 'dalam grup' : `${fmtSec(it.start)} - ${fmtSec(it.end)}`;
-      time.title = it.nested ? 'Teks ini berada di dalam grup layer' : 'Lihat teks ini di preview';
+      time.title = it.nested ? 'Teks ini berada di dalam grup layer' : 'Lihat posisi teks ini di video';
       if (!it.nested) {
         time.addEventListener('click', () => {
           const seek = document.getElementById('seek');
@@ -1567,11 +1592,14 @@ document.addEventListener('DOMContentLoaded', () => {
           seek.dispatchEvent(new Event('change', { bubbles: true }));
         });
       }
+
       const flag = document.createElement('span');
       flag.className = 'text-flag';
+
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'btn sm';
+      del.className = 'text-del-btn';
+
       head.append(idx, time, flag, del);
 
       const area = document.createElement('textarea');
@@ -1582,27 +1610,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const paint = () => {
         const e = window.__textEdits[it.key] || {};
-        const removed = !!e.hidden;
-        const edited = e.content !== undefined;
+        const removed = !!e.hidden || (e.content !== undefined && !e.content.trim());
+        const edited = e.content !== undefined && e.content.trim().length > 0;
         row.classList.toggle('is-removed', removed);
         row.classList.toggle('is-edited', edited && !removed);
-        flag.textContent = removed ? 'akan dihapus' : (edited ? 'diubah' : '');
+        flag.textContent = removed ? 'TERHAPUS' : (edited ? 'diubah' : '');
         flag.classList.toggle('removed', removed);
-        del.textContent = removed ? 'Kembalikan' : 'Hapus';
+        del.textContent = removed ? 'Batal Hapus' : 'Hapus Teks';
         area.disabled = removed || applyingText;
       };
 
       area.addEventListener('input', () => {
         const e = Object.assign({}, window.__textEdits[it.key]);
-        if (area.value === it.content) delete e.content; else e.content = area.value;
+        const val = area.value;
+        if (!val.trim()) {
+          // Jika isinya dikosongkan, otomatis tandai sebagai dihapus bersih!
+          e.hidden = true;
+          e.content = '';
+        } else if (val === it.content) {
+          delete e.content;
+          delete e.hidden;
+        } else {
+          e.content = val;
+          delete e.hidden;
+        }
         if (Object.keys(e).length) window.__textEdits[it.key] = e; else delete window.__textEdits[it.key];
         paint();
         refreshTextButtons();
         showTextState('');
       });
+
       del.addEventListener('click', () => {
         const e = Object.assign({}, window.__textEdits[it.key]);
-        if (e.hidden) delete e.hidden; else e.hidden = true;
+        if (e.hidden) {
+          delete e.hidden;
+          if (e.content === '') delete e.content;
+        } else {
+          e.hidden = true;
+          e.content = '';
+        }
         if (Object.keys(e).length) window.__textEdits[it.key] = e; else delete window.__textEdits[it.key];
         paint();
         refreshTextButtons();
@@ -1714,15 +1760,67 @@ document.addEventListener('DOMContentLoaded', () => {
         xmlStr = window.__transformPresetXml(xmlStr, rConfig.ratio, rConfig.mode);
       }
       const dom = parseXml(xmlStr);
-      Array.from(dom.getElementsByTagName('text')).forEach((el, ti) => {
+      const textElements = Array.from(dom.getElementsByTagName('text'));
+      const toRemove = [];
+
+      textElements.forEach((el, ti) => {
         const e = tEdits[`${di}:${ti}`];
         if (!e) return;
-        if (e.hidden) el.setAttribute('hidden', 'true');
-        if (e.content !== undefined) {
-          const c = el.getElementsByTagName('content')[0];
-          if (c) c.textContent = e.content;
+
+        const isRemoved = !!e.hidden || (e.content !== undefined && !e.content.trim());
+        if (isRemoved) {
+          // 1. Kosongkan semua node <content> di dalamnya
+          Array.from(el.getElementsByTagName('content')).forEach((c) => {
+            c.textContent = '';
+          });
+
+          // 2. Set durasi 0 dan flag hidden
+          el.setAttribute('hidden', 'true');
+          el.setAttribute('startTime', '0');
+          el.setAttribute('endTime', '0');
+
+          // 3. Set scale transform ke 0
+          let tr = el.getElementsByTagName('transform')[0];
+          if (!tr) {
+            tr = dom.createElement('transform');
+            el.appendChild(tr);
+          }
+          let sc = tr.getElementsByTagName('scale')[0];
+          if (!sc) {
+            sc = dom.createElement('scale');
+            tr.appendChild(sc);
+          }
+          sc.setAttribute('value', '0.000000,0.000000');
+
+          // 4. Set opacity dan color menjadi 100% transparan
+          let fc = el.getElementsByTagName('fillColor')[0];
+          if (fc) fc.setAttribute('value', '#00000000');
+          let op = el.getElementsByTagName('opacity')[0];
+          if (op) op.setAttribute('value', '0.000000');
+
+          // 5. Tandai untuk di-remove langsung dari pohon dokumen XML
+          toRemove.push(el);
+        } else if (e.content !== undefined) {
+          const contents = el.getElementsByTagName('content');
+          if (contents.length > 0) {
+            contents[0].textContent = e.content;
+          } else {
+            const newContent = dom.createElement('content');
+            newContent.textContent = e.content;
+            el.appendChild(newContent);
+          }
+          el.removeAttribute('hidden');
         }
       });
+
+      // HAPUS ELEMEN <text> LANGSUNG DARI POHON DOM XML!
+      // Ini memberikan kepastian 100% bahwa WebGL engine tidak akan pernah me-render teks yang dihapus!
+      toRemove.forEach((el) => {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      });
+
       const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(dom.documentElement);
       return new File([xml], doc.name, { type: 'text/xml' });
     });
@@ -1799,9 +1897,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // Handler tombol cepat Hapus Semua Teks Sekaligus
+  const btnDeleteAllTexts = document.getElementById('btnDeleteAllTexts');
+  if (btnDeleteAllTexts) {
+    btnDeleteAllTexts.addEventListener('click', () => {
+      const items = listTexts();
+      if (!items.length) return;
+      const allRemoved = items.every((it) => {
+        const e = window.__textEdits[it.key];
+        return e && (e.hidden || (e.content !== undefined && !e.content.trim()));
+      });
+
+      if (allRemoved) {
+        // Kembalikan semua teks
+        items.forEach((it) => {
+          if (window.__textEdits[it.key]) {
+            delete window.__textEdits[it.key].hidden;
+            if (window.__textEdits[it.key].content === '') {
+              delete window.__textEdits[it.key].content;
+            }
+            if (Object.keys(window.__textEdits[it.key]).length === 0) {
+              delete window.__textEdits[it.key];
+            }
+          }
+        });
+        showTextState('Penghapusan semua teks dibatalkan. Klik "Terapkan Perubahan Teks" untuk mengembalikan.', '#cbd5e1');
+      } else {
+        // Tandai seluruh teks untuk dihapus
+        items.forEach((it) => {
+          window.__textEdits[it.key] = Object.assign({}, window.__textEdits[it.key], { hidden: true, content: '' });
+        });
+        showTextState(`Semua (${items.length}) teks ditandai akan dihapus bersih! Klik "Terapkan Perubahan Teks" untuk mengeksekusi.`, '#38bdf8');
+      }
+      renderTexts();
+      refreshTextButtons();
+    });
+  }
+
   textApplyBtn?.addEventListener('click', () => {
     const n = Object.keys(window.__textEdits).length;
-    applyTexts(JSON.parse(JSON.stringify(window.__textEdits)), `Selesai: ${n} teks diubah/dihapus.`);
+    applyTexts(JSON.parse(JSON.stringify(window.__textEdits)), `Selesai: ${n} teks berhasil diubah/dihapus bersih!`);
   });
   textRevertBtn?.addEventListener('click', () => {
     if (isDirty()) {
@@ -1809,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTexts();
       showTextState('Perubahan yang belum diterapkan dibatalkan.', '#cbd5e1');
     } else {
-      applyTexts({}, 'Teks dikembalikan ke aslinya.');
+      applyTexts({}, 'Seluruh teks dikembalikan ke kondisi asli preset.');
     }
   });
 
