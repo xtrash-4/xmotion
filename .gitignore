@@ -48,3 +48,7 @@ android/.idea/
 # Media preset (mp4) HARUS ikut ter-deploy; tanpa ini Render kehilangan video & musik asli link
 !web/runtime/media/**/*.mp4
 !web/preset/*.mp4
+
+# Android assets cache exclusion (Jaga agar size APK tetap ramping)
+android/app/src/main/assets/web/runtime/media/*
+!android/app/src/main/assets/web/runtime/media/.gitkeep
