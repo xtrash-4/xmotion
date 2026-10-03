@@ -138,7 +138,18 @@ public class MainActivity extends Activity {
                 String path = uri.getPath();
 
                 if (host != null) {
-                    // 1. Muat aset lokal (HTML, CSS, JS, Fonts, Shaders) langsung dari storage internal APK (0 detik)
+                    // 1. Sajikan effect-index.json & shape-index.json langsung dari aset lokal (0 detik, cegah 404/Unexpected end of JSON)
+                    if (path != null && (path.endsWith("effect-index.json") || path.endsWith("shape-index.json"))) {
+                        try {
+                            String assetPath = path.contains("shape") ? "web/shape-index.json" : "web/effect-index.json";
+                            java.io.InputStream is = getAssets().open(assetPath);
+                            java.util.Map<String, String> jsonHeaders = new java.util.HashMap<>();
+                            jsonHeaders.put("Access-Control-Allow-Origin", "*");
+                            return new WebResourceResponse("application/json", "utf-8", 200, "OK", jsonHeaders, is);
+                        } catch (Exception ignored) {}
+                    }
+
+                    // 2. Muat aset lokal (HTML, CSS, JS, Fonts, Shaders) langsung dari storage internal APK (0 detik)
                     if (host.equalsIgnoreCase(APP_HOST) && path != null && path.startsWith("/assets/")) {
                         WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
                         if (response != null) {
@@ -146,7 +157,7 @@ public class MainActivity extends Activity {
                         }
                     }
 
-                    // 2. Teruskan request API / media ke server backend Render secara transparan
+                    // 3. Teruskan request API / media ke server backend Render secara transparan
                     if ((host.equalsIgnoreCase(APP_HOST) || host.contains("onrender.com")) && path != null &&
                             (path.startsWith("/api/") || path.startsWith("/effects/") || path.startsWith("/runtime/effects/") || path.endsWith(".m4a") || path.endsWith(".mp3"))) {
                         String query = uri.getEncodedQuery();
@@ -390,8 +401,12 @@ public class MainActivity extends Activity {
                     buffer.write(temp, 0, read);
                 }
                 byte[] bytes = buffer.toByteArray();
-                if (bytes.length == 0 && responseCode >= 400) {
-                    bytes = "{\"error\": \"Gagal menghubungi server cloud.\"}".getBytes("utf-8");
+                if (bytes.length == 0) {
+                    if (responseCode >= 400) {
+                        bytes = "{\"error\": \"Gagal menghubungi server cloud.\"}".getBytes("utf-8");
+                    } else {
+                        bytes = "{}".getBytes("utf-8");
+                    }
                 }
                 responseHeaders.put("Content-Length", String.valueOf(bytes.length));
                 return new WebResourceResponse(mimeType, encoding, responseCode, reasonPhrase, responseHeaders, new java.io.ByteArrayInputStream(bytes));

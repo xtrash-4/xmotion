@@ -2672,6 +2672,33 @@ document.addEventListener('DOMContentLoaded', () => {
     loadInitialDefaultPreset();
   };
 
+  // -------------------------------------------------------------------
+  // ANTI-GANGGUAN: Auto-dismiss overlay error palsu/non-fatal jika studio aktif
+  // -------------------------------------------------------------------
+  const stageBusyElem = document.getElementById('stageBusy');
+  const busyDetailElem = document.getElementById('busyDetail');
+  const busyDismissElem = document.getElementById('busyDismiss');
+
+  function checkAndAutoDismissBogusError() {
+    if (!stageBusyElem || stageBusyElem.hidden) return;
+    const detail = (busyDetailElem?.textContent || '').toLowerCase();
+    const isBogusJsonError = detail.includes('unexpected end of json') || detail.includes("failed to execute 'json'");
+    
+    // Jika errornya adalah JSON parsing non-fatal atau preset sebenarnya sudah aktif
+    if (isBogusJsonError || (engineHasPreset() && detail.includes('json'))) {
+      console.warn('[XEDITZ Guard] Menutup otomatis overlay error non-fatal:', detail);
+      if (busyDismissElem) busyDismissElem.click();
+      stageBusyElem.hidden = true;
+      stageBusyElem.style.display = 'none';
+    }
+  }
+
+  if (stageBusyElem) {
+    const busyObs = new MutationObserver(checkAndAutoDismissBogusError);
+    busyObs.observe(stageBusyElem, { attributes: true, attributeFilter: ['hidden', 'class', 'style'], subtree: true, childList: true });
+    setInterval(checkAndAutoDismissBogusError, 500);
+  }
+
   autoLoadTimer = setTimeout(checkAndAutoLoad, 2500);
 });
 
