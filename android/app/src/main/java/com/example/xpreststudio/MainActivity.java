@@ -2,6 +2,8 @@ package com.example.xpreststudio;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -308,7 +310,7 @@ public class MainActivity extends Activity {
             java.net.URL url = new java.net.URL(targetUrl);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
             conn.setRequestMethod(request.getMethod());
-            conn.setConnectTimeout(25000);
+            conn.setConnectTimeout(60000);
             conn.setReadTimeout(90000);
             conn.setInstanceFollowRedirects(true);
 
@@ -341,13 +343,34 @@ public class MainActivity extends Activity {
 
             java.util.Map<String, String> responseHeaders = new java.util.HashMap<>();
             for (java.util.Map.Entry<String, java.util.List<String>> entry : conn.getHeaderFields().entrySet()) {
-                if (entry.getKey() != null && !entry.getValue().isEmpty()) {
-                    responseHeaders.put(entry.getKey(), entry.getValue().get(0));
+                String key = entry.getKey();
+                if (key != null && !entry.getValue().isEmpty()) {
+                    // FILTER OUT hop-by-hop & chunked headers yang merusak Chromium parser:
+                    if (key.equalsIgnoreCase("Transfer-Encoding") ||
+                        key.equalsIgnoreCase("Content-Encoding") ||
+                        key.equalsIgnoreCase("Content-Length") ||
+                        key.equalsIgnoreCase("Connection") ||
+                        key.equalsIgnoreCase("Keep-Alive") ||
+                        key.equalsIgnoreCase("Vary")) {
+                        continue;
+                    }
+                    responseHeaders.put(key, entry.getValue().get(0));
                 }
             }
             responseHeaders.put("Access-Control-Allow-Origin", "*");
             responseHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
             responseHeaders.put("Access-Control-Allow-Headers", "*");
+
+            String reasonPhrase = conn.getResponseMessage();
+            if (reasonPhrase == null || reasonPhrase.trim().isEmpty()) {
+                if (responseCode == 200) reasonPhrase = "OK";
+                else if (responseCode == 400) reasonPhrase = "Bad Request";
+                else if (responseCode == 404) reasonPhrase = "Not Found";
+                else if (responseCode == 500) reasonPhrase = "Internal Server Error";
+                else if (responseCode == 502) reasonPhrase = "Bad Gateway";
+                else if (responseCode == 503) reasonPhrase = "Service Unavailable";
+                else reasonPhrase = "HTTP " + responseCode;
+            }
 
             // Untuk respon API / JSON, buffer payload secara komplit agar tidak terjadi pemotongan stream (Unexpected end of JSON)
             if (mimeType.contains("json") || targetUrl.contains("/api/")) {
@@ -361,10 +384,11 @@ public class MainActivity extends Activity {
                 if (bytes.length == 0 && responseCode >= 400) {
                     bytes = "{\"error\": \"Gagal menghubungi server cloud.\"}".getBytes("utf-8");
                 }
-                return new WebResourceResponse(mimeType, encoding, responseCode, conn.getResponseMessage(), responseHeaders, new java.io.ByteArrayInputStream(bytes));
+                responseHeaders.put("Content-Length", String.valueOf(bytes.length));
+                return new WebResourceResponse(mimeType, encoding, responseCode, reasonPhrase, responseHeaders, new java.io.ByteArrayInputStream(bytes));
             }
 
-            return new WebResourceResponse(mimeType, encoding, responseCode, conn.getResponseMessage(), responseHeaders, stream);
+            return new WebResourceResponse(mimeType, encoding, responseCode, reasonPhrase, responseHeaders, stream);
         } catch (Exception e) {
             Log.w("XEDITZ_PROXY", "Proxy fallback error for " + targetUrl + ": " + e.getMessage());
             String safeMsg = (e.getMessage() != null) ? e.getMessage().replace("\"", "'") : "Timeout";
@@ -671,6 +695,23 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
             return -1;
+        }
+
+        @JavascriptInterface
+        public String getClipboardText() {
+            try {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null && clipboard.hasPrimaryClip()) {
+                    ClipData clip = clipboard.getPrimaryClip();
+                    if (clip != null && clip.getItemCount() > 0) {
+                        CharSequence text = clip.getItemAt(0).getText();
+                        return (text != null) ? text.toString() : "";
+                    }
+                }
+            } catch (Exception e) {
+                Log.w("XEDITZ_CLIP", "Clipboard read error: " + e.getMessage());
+            }
+            return "";
         }
 
         public void release() {

@@ -1082,6 +1082,12 @@ async def get_project_xml(url: str, project: str = None):
 
     # 4. Link share resmi Alight Motion (alightcreative.com / alight.link)
     if "alightcreative.com" in resolved_url or "alight.link" in resolved_url:
+        # Cek apakah link terpotong / belum lengkap (misal cuma alightcreative.com/am/sha)
+        if not re.search(r'/p/([A-Za-z0-9_-]+)', resolved_url) and not re.search(r'alight\.link/([A-Za-z0-9_-]+)', resolved_url):
+            return JSONResponse({
+                "error": "Link Alight Motion belum lengkap atau terpotong. Pastikan Anda menyalin link secara utuh dari aplikasi Alight Motion (format: https://alightcreative.com/am/share/u/{USER}/p/{PACKAGE})."
+            }, status_code=400)
+
         direct_error = None
         # Prioritas 1: Download direct dari Firebase Storage Alight Creative
         try:

@@ -754,24 +754,40 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statusAmDesc) statusAmDesc.textContent = desc || '';
   }
 
+  // Universal Clipboard Reader (Android Native Bridge + Web Clipboard API)
+  const readUniversalClipboardText = async () => {
+    try {
+      if (window.AndroidNative && typeof window.AndroidNative.getClipboardText === 'function') {
+        const nativeText = window.AndroidNative.getClipboardText();
+        if (nativeText && nativeText.trim()) return nativeText.trim();
+      }
+    } catch (_) {}
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const clipText = await navigator.clipboard.readText();
+        if (clipText && clipText.trim()) return clipText.trim();
+      }
+    } catch (_) {}
+    return '';
+  };
+  window.__readUniversalClipboardText = readUniversalClipboardText;
+
   // Tombol Paste dari Clipboard
   if (btnPasteAm && customUrlAmInput) {
     btnPasteAm.addEventListener('click', async () => {
-      try {
-        if (navigator.clipboard && navigator.clipboard.readText) {
-          const clipText = await navigator.clipboard.readText();
-          if (clipText && (clipText.startsWith('http://') || clipText.startsWith('https://'))) {
-            customUrlAmInput.value = clipText.trim();
-            customUrlAmInput.focus();
-            showAmStatus('success', 'Link berhasil ditempel dari clipboard.', clipText.trim());
-            return;
-          }
-        }
-      } catch (clipErr) {
-        console.warn('Clipboard read error:', clipErr);
+      const clipText = await readUniversalClipboardText();
+      if (clipText && (clipText.startsWith('http://') || clipText.startsWith('https://'))) {
+        customUrlAmInput.value = clipText;
+        customUrlAmInput.focus();
+        showAmStatus('success', 'Link berhasil ditempel dari clipboard.', clipText);
+      } else if (clipText) {
+        customUrlAmInput.value = clipText;
+        customUrlAmInput.focus();
+        showAmStatus('error', 'Teks bukan tautan web.', 'Pastikan menyalin tautan Alight Motion atau XML.');
+      } else {
+        customUrlAmInput.focus();
+        customUrlAmInput.select();
       }
-      customUrlAmInput.focus();
-      customUrlAmInput.select();
     });
   }
 
@@ -803,6 +819,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isHttp) {
         showAmStatus('error', 'Tautan tidak valid.', 'Harap masukkan tautan web lengkap diawali http:// atau https://');
         return;
+      }
+
+      const isAm = /alightcreative\.com|alight\.link/i.test(link);
+      if (isAm) {
+        const isAlightCreative = /alightcreative\.com/i.test(link);
+        const isAlightLink = /alight\.link/i.test(link);
+        const isCompleteAlightCreative = isAlightCreative && (/\/p\/[a-zA-Z0-9_-]+|\/share\/u\/[a-zA-Z0-9_-]+\/p\//i.test(link) || (link.includes('/share/') && link.length > 38));
+        const isCompleteAlightLink = isAlightLink && /alight\.link\/[a-zA-Z0-9_-]{3,}/i.test(link);
+
+        if (!isCompleteAlightCreative && !isCompleteAlightLink) {
+          showAmStatus('error', 'Link Alight Motion Belum Lengkap', 'Link yang Anda masukkan terpotong atau belum selesai disalin. Pastikan Anda menyalin link secara utuh dari aplikasi Alight Motion (contoh: https://alightcreative.com/am/share/u/.../p/...).');
+          return;
+        }
       }
 
       btnFetchAm.disabled = true;
@@ -1179,7 +1208,11 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('[Link AM Import Error]', err);
         btnFetchAm.disabled = false;
-        showAmStatus('error', 'Gagal memproses link.', err.message);
+        let errMsg = err.message || 'Gagal memproses link.';
+        if (/failed to fetch/i.test(errMsg) || /network/i.test(errMsg)) {
+          errMsg = 'Tidak dapat menghubungi server. Periksa koneksi internet Anda atau coba ketuk "Ambil preset" lagi beberapa saat.';
+        }
+        showAmStatus('error', 'Gagal memproses link.', errMsg);
       }
     };
 
@@ -2096,6 +2129,18 @@ document.addEventListener('DOMContentLoaded', () => {
       setWelcomeStatus('error', 'Link tidak valid', 'Gunakan link resmi Alight Motion, Google Drive XML, atau URL XML preset.');
       return;
     }
+
+    if (isAm) {
+      const isAlightCreative = /alightcreative\.com/i.test(link);
+      const isAlightLink = /alight\.link/i.test(link);
+      const isCompleteAlightCreative = isAlightCreative && (/\/p\/[a-zA-Z0-9_-]+|\/share\/u\/[a-zA-Z0-9_-]+\/p\//i.test(link) || (link.includes('/share/') && link.length > 38));
+      const isCompleteAlightLink = isAlightLink && /alight\.link\/[a-zA-Z0-9_-]{3,}/i.test(link);
+
+      if (!isCompleteAlightCreative && !isCompleteAlightLink) {
+        setWelcomeStatus('error', 'Link Alight Motion Belum Lengkap', 'Link yang Anda masukkan terpotong atau belum selesai disalin. Pastikan Anda menyalin link secara utuh dari aplikasi Alight Motion (contoh: https://alightcreative.com/am/share/u/.../p/...).');
+        return;
+      }
+    }
     const amInput = byId('customUrlAmInput');
     const amBtn = byId('btnFetchAm');
     const amBox = byId('customUrlAmStatus');
@@ -2177,6 +2222,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   wGo?.addEventListener('click', importFromWelcome);
+  wPaste?.addEventListener('click', async () => {
+    const clipText = await readUniversalClipboardText();
+    if (clipText) {
+      if (wLink) {
+        wLink.value = clipText;
+        wLink.focus();
+      }
+      setWelcomeStatus(null);
+      toast('Link berhasil ditempel dari clipboard.');
+    } else {
+      if (wLink) {
+        wLink.focus();
+        wLink.select();
+      }
+      toast('Silakan tempel (paste) link langsung di kolom input.');
+    }
+  });
   wLink?.addEventListener('keydown', (e) => { if (e.key === 'Enter') importFromWelcome(); });
   wLink?.addEventListener('input', () => setWelcomeStatus(null));
   wXml?.addEventListener('change', importXmlFromWelcome);
