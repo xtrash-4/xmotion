@@ -3405,10 +3405,10 @@ dialog#exportModal::backdrop {
   width: 100%;
   margin-top: 16px;
   padding: 16px 16px 18px 16px;
-  background: linear-gradient(135deg, rgba(8, 14, 26, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
-  border: 2px solid #38bdf8;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(2, 132, 199, 0.35), inset 0 0 20px rgba(56, 189, 248, 0.15), 4px 4px 0px #0369a1;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f9ff 55%, #e0f2fe 100%);
+  border: 2.5px solid #38bdf8;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.22), 3.5px 3.5px 0px #0284c7;
   overflow: hidden;
   box-sizing: border-box;
   animation: cyberPanelFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -3435,10 +3435,10 @@ dialog#exportModal::backdrop {
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent 0%, #38bdf8 30%, #ffffff 50%, #38bdf8 70%, transparent 100%);
-  box-shadow: 0 0 14px 2px #38bdf8, 0 0 24px #0284c7;
-  opacity: 0.85;
+  height: 2.5px;
+  background: linear-gradient(90deg, transparent 0%, #38bdf8 30%, #0284c7 50%, #38bdf8 70%, transparent 100%);
+  box-shadow: 0 0 10px 1px #38bdf8, 0 0 16px rgba(2, 132, 199, 0.4);
+  opacity: 0.65;
   pointer-events: none;
   z-index: 4;
   animation: cyberLaserSweep 2.4s ease-in-out infinite alternate;
@@ -3450,11 +3450,11 @@ dialog#exportModal::backdrop {
     opacity: 0.3;
   }
   50% {
-    opacity: 1;
+    opacity: 0.85;
   }
   100% {
     top: 96%;
-    opacity: 0.4;
+    opacity: 0.35;
   }
 }
 
@@ -3465,7 +3465,7 @@ dialog#exportModal::backdrop {
   justify-content: space-between;
   width: 100%;
   margin-bottom: 12px;
-  border-bottom: 1px dashed rgba(56, 189, 248, 0.25);
+  border-bottom: 1px dashed #bae6fd;
   padding-bottom: 8px;
 }
 
@@ -3473,30 +3473,29 @@ dialog#exportModal::backdrop {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
   padding: 3px 10px;
   border-radius: 9999px;
   font-family: var(--font-heading);
   font-size: 0.72rem;
   font-weight: 800;
-  color: #38bdf8;
+  color: #0284c7;
   letter-spacing: 0.05em;
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
 }
 
 .cyber-badge-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 8px #38bdf8;
+  background: #0284c7;
+  box-shadow: 0 0 6px #38bdf8;
   animation: cyberDotPulse 1.2s ease-in-out infinite;
 }
 
 @keyframes cyberDotPulse {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.4; }
+  50% { transform: scale(1.3); opacity: 0.5; }
 }
 
 /* Mini Audio Frequency Bars / Equalizer */
@@ -3509,9 +3508,9 @@ dialog#exportModal::backdrop {
 
 .freq-bar {
   width: 3px;
-  background: #38bdf8;
+  background: #0284c7;
   border-radius: 2px;
-  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 4px rgba(56, 189, 248, 0.5);
   animation: freqJump 0.8s ease-in-out infinite alternate;
 }
 
@@ -3540,8 +3539,9 @@ dialog#exportModal::backdrop {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1.5px dashed rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 16px rgba(2, 132, 199, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.15);
+  border: 1.5px dashed #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25), inset 0 0 8px rgba(56, 189, 248, 0.15);
+  background: rgba(224, 242, 254, 0.4);
   animation: cyberRadarRotate 4s linear infinite;
 }
 
@@ -3557,7 +3557,7 @@ dialog#exportModal::backdrop {
   width: 28px;
   height: 28px;
   transform-origin: 0 0;
-  background: conic-gradient(from 0deg, rgba(56, 189, 248, 0.4) 0deg, transparent 90deg);
+  background: conic-gradient(from 0deg, rgba(56, 189, 248, 0.35) 0deg, transparent 90deg);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -3567,8 +3567,8 @@ dialog#exportModal::backdrop {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 6px #38bdf8;
+  background: #0284c7;
+  box-shadow: 0 0 5px #38bdf8;
 }
 
 .radar-dot.dot-1 {
@@ -3596,7 +3596,7 @@ dialog#exportModal::backdrop {
   border-radius: 12px;
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   border: 1.5px solid #7dd3fc;
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3624,18 +3624,17 @@ dialog#exportModal::backdrop {
 
 .welcome-status .ws-title {
   font-family: var(--font-heading);
-  font-size: 0.96rem;
+  font-size: 0.95rem;
   font-weight: 800;
-  color: #ffffff;
+  color: #0f172a;
   letter-spacing: 0.01em;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
   margin-bottom: 4px;
 }
 
 .welcome-status .ws-desc {
   font-size: 0.78rem;
-  color: #94a3b8;
-  font-weight: 500;
+  color: #475569;
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -3644,11 +3643,11 @@ dialog#exportModal::backdrop {
   position: relative;
   width: 100%;
   height: 8px;
-  background: rgba(15, 23, 42, 0.8);
+  background: #e2e8f0;
   border-radius: 9999px;
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  border: 1px solid #7dd3fc;
   overflow: hidden;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 10px rgba(56, 189, 248, 0.2);
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.1);
   margin-bottom: 12px;
 }
 
@@ -3658,10 +3657,10 @@ dialog#exportModal::backdrop {
   left: 0;
   bottom: 0;
   width: 100%;
-  background: linear-gradient(90deg, #00f0ff 0%, #38bdf8 30%, #ec4899 65%, #00f0ff 100%);
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 35%, #ec4899 70%, #0284c7 100%);
   background-size: 200% 100%;
   border-radius: 9999px;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
   animation: tubeStreamFlow 1.6s linear infinite;
 }
 
@@ -3677,7 +3676,7 @@ dialog#exportModal::backdrop {
   justify-content: space-between;
   width: 100%;
   padding-top: 6px;
-  border-top: 1px solid rgba(56, 189, 248, 0.15);
+  border-top: 1px solid #bae6fd;
   font-family: var(--font-heading);
 }
 
@@ -3685,7 +3684,7 @@ dialog#exportModal::backdrop {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  opacity: 0.4;
+  opacity: 0.65;
   transition: all 0.3s ease;
 }
 
@@ -3694,19 +3693,20 @@ dialog#exportModal::backdrop {
   font-weight: 800;
   padding: 2px 5px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
 }
 
 .pipe-step .step-label {
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .pipe-divider {
-  color: rgba(56, 189, 248, 0.3);
+  color: #94a3b8;
   font-size: 0.72rem;
 }
 
@@ -3715,77 +3715,108 @@ dialog#exportModal::backdrop {
 }
 
 .pipe-step.active .step-num {
-  background: #38bdf8;
-  color: #080e1a;
-  box-shadow: 0 0 8px #38bdf8;
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.4);
 }
 
 .pipe-step.active .step-label {
-  color: #38bdf8;
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  color: #0284c7;
+  font-weight: 800;
   animation: labelPulse 1.2s ease-in-out infinite alternate;
 }
 
 @keyframes labelPulse {
-  0% { opacity: 0.7; }
+  0% { opacity: 0.75; }
   100% { opacity: 1; }
 }
 
 .pipe-step.done {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .pipe-step.done .step-num {
-  background: #22c55e;
+  background: #16a34a;
   color: #ffffff;
-  box-shadow: 0 0 6px #22c55e;
+  border-color: #16a34a;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
 }
 
 .pipe-step.done .step-label {
-  color: #86efac;
+  color: #15803d;
+  font-weight: 800;
 }
 
 /* ERROR STATE PADA CYBER SCANNER */
 .welcome-status.is-error {
+  background: linear-gradient(180deg, #ffffff 0%, #fff1f2 60%, #ffe4e6 100%) !important;
   border-color: #f43f5e !important;
-  box-shadow: 0 10px 30px rgba(244, 63, 94, 0.35), inset 0 0 20px rgba(244, 63, 94, 0.15), 4px 4px 0px #9f1239 !important;
+  box-shadow: 0 8px 24px rgba(244, 63, 94, 0.2), 3.5px 3.5px 0px #be123c !important;
 }
 
 .welcome-status.is-error .cyber-scan-beam {
-  background: linear-gradient(90deg, transparent 0%, #f43f5e 30%, #ffffff 50%, #f43f5e 70%, transparent 100%) !important;
-  box-shadow: 0 0 14px 2px #f43f5e !important;
+  background: linear-gradient(90deg, transparent 0%, #f43f5e 30%, #be123c 50%, #f43f5e 70%, transparent 100%) !important;
+  box-shadow: 0 0 10px 1px #f43f5e !important;
+}
+
+.welcome-status.is-error .cyber-status-header {
+  border-bottom: 1px dashed #fecdd3 !important;
 }
 
 .welcome-status.is-error .cyber-terminal-badge {
-  background: rgba(244, 63, 94, 0.15) !important;
-  border-color: rgba(244, 63, 94, 0.5) !important;
-  color: #f43f5e !important;
-  text-shadow: 0 0 8px rgba(244, 63, 94, 0.5) !important;
+  background: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  color: #e11d48 !important;
 }
 
 .welcome-status.is-error .cyber-badge-dot {
-  background: #f43f5e !important;
-  box-shadow: 0 0 8px #f43f5e !important;
+  background: #e11d48 !important;
+  box-shadow: 0 0 6px #f43f5e !important;
 }
 
 .welcome-status.is-error .freq-bar {
-  background: #f43f5e !important;
-  box-shadow: 0 0 6px rgba(244, 63, 94, 0.6) !important;
+  background: #e11d48 !important;
+  box-shadow: none !important;
+}
+
+.welcome-status.is-error .cyber-radar-ring {
+  border-color: #f43f5e !important;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.2) !important;
+  background: rgba(255, 228, 230, 0.4) !important;
+}
+
+.welcome-status.is-error .radar-sweep {
+  background: conic-gradient(from 0deg, rgba(244, 63, 94, 0.3) 0deg, transparent 90deg) !important;
+}
+
+.welcome-status.is-error .radar-dot {
+  background: #e11d48 !important;
+  box-shadow: 0 0 4px #f43f5e !important;
 }
 
 .welcome-status.is-error .cyber-center-icon {
   background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
   border-color: #fda4af !important;
-  box-shadow: 0 0 14px rgba(244, 63, 94, 0.6) !important;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35) !important;
 }
 
 .welcome-status.is-error .ws-title {
-  color: #fda4af !important;
-  text-shadow: 0 0 10px rgba(244, 63, 94, 0.6) !important;
+  color: #9f1239 !important;
+  text-shadow: none !important;
+}
+
+.welcome-status.is-error .ws-desc {
+  color: #be123c !important;
+}
+
+.welcome-status.is-error .cyber-progress-tube {
+  background: #ffe4e6 !important;
+  border-color: #fda4af !important;
 }
 
 .welcome-status.is-error .tube-glow-fill {
   background: #f43f5e !important;
-  box-shadow: 0 0 12px rgba(244, 63, 94, 0.8) !important;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.5) !important;
   animation: none !important;
 }
