@@ -120,6 +120,11 @@ render_state = {
 }
 render_lock = threading.Lock()
 
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "service": "xmotion"}
+
 @app.get("/audio")
 @app.get("/audio.m4a")
 async def get_audio():

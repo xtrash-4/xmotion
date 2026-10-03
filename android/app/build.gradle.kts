@@ -16,8 +16,8 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Editor dimuat dari server (https), bukan dari aset lokal: aset web tidak ikut APK.
-            assets.setSrcDirs(emptyList<String>())
+            // Aset web lokal disertakan agar editor terbuka instan 0 detik via WebViewAssetLoader
+            assets.srcDirs("src/main/assets")
         }
     }
 
@@ -34,5 +34,7 @@ android {
 }
 
 dependencies {
-    // Standard built-in Android framework WebView & Activity
+    // AndroidX WebKit untuk WebViewAssetLoader (buka editor instan dari aset lokal via origin HTTPS)
+    implementation("androidx.webkit:webkit:1.10.0")
 }
+

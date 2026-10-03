@@ -27,7 +27,9 @@ import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -37,6 +39,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.webkit.WebViewAssetLoader;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -45,21 +49,25 @@ import java.io.OutputStream;
 /**
  * XEDITZ Studio.
  *
- * Mesin pemutar (engine) hanya mau berjalan dari origin http(s): saat halaman dibuka dari file://
- * engine menolak dan layar preview tetap kosong (0.00s / 0.00s, 0 slot). Karena itu aplikasi ini
- * memuat editor langsung dari server (APP_URL), bukan dari aset lokal.
+ * Menggunakan WebViewAssetLoader resmi Android untuk memuat aset lokal (HTML/CSS/JS/WebGL)
+ * secara instan (0 detik) di bawah origin HTTPS sah (appassets.androidplatform.net).
+ * Nama/halaman "Starting service Render" tidak akan pernah muncul saat APK dibuka.
+ * Panggilan API remote (/api/...) diteruskan secara transparan ke backend online.
  */
 public class MainActivity extends Activity {
 
-    /** Alamat editor. Ubah di sini bila server dipindah. */
-    private static final String APP_URL = "https://xmotion-5tnu.onrender.com/";
-    private static final String APP_HOST = "xmotion-5tnu.onrender.com";
+    /** Domain virtual untuk memuat aset lokal instan lewat origin HTTPS resmi */
+    private static final String APP_HOST = "appassets.androidplatform.net";
+    private static final String LOCAL_URL = "https://appassets.androidplatform.net/assets/web/index.html";
+    /** Alamat backend Render online untuk memproses link Alight Motion & audio TikTok */
+    private static final String REMOTE_BACKEND_URL = "https://xmotion-5tnu.onrender.com";
     private static final String RETRY_URL = "xeditz://retry";
 
     private WebView webView;
     private FrameLayout rootView;
     private LinearLayout loadingView;
     private TextView loadingText;
+    private WebViewAssetLoader assetLoader;
     private ValueCallback<Uri[]> filePathCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private WebAppInterface webAppInterface;
@@ -68,7 +76,7 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             if (loadingView != null && loadingView.getVisibility() == View.VISIBLE) {
-                loadingText.setText("Server gratis sedang bangun. Ini bisa 30-60 detik, mohon tunggu...");
+                loadingText.setText("Menyiapkan studio...");
             }
         }
     };
@@ -85,10 +93,19 @@ public class MainActivity extends Activity {
         rootView = new FrameLayout(this);
         rootView.setBackgroundColor(Color.parseColor("#050711"));
 
+        // Inisialisasi WebViewAssetLoader untuk membuka aset lokal dengan protokol https
+        assetLoader = new WebViewAssetLoader.Builder()
+                .setDomain(APP_HOST)
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+
+        // Solusi 1: Kirim background keep-alive ping ke Render agar server bangun lebih awal & tidak tidur
+        triggerBackgroundKeepAlive();
+
         webView = new WebView(this);
         webView.setBackgroundColor(Color.parseColor("#050711"));
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        WebView.setWebContentsDebuggingEnabled(true); // memudahkan debug lewat chrome://inspect
+        WebView.setWebContentsDebuggingEnabled(true);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -97,8 +114,7 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        webView.clearCache(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -111,6 +127,34 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) {
+                    return super.shouldInterceptRequest(view, request);
+                }
+                Uri uri = request.getUrl();
+                String host = uri.getHost();
+                String path = uri.getPath();
+
+                if (host != null && host.equalsIgnoreCase(APP_HOST)) {
+                    // 1. Muat aset lokal (HTML, CSS, JS, Fonts, Shaders) langsung dari storage internal APK (0 detik)
+                    if (path != null && path.startsWith("/assets/")) {
+                        WebResourceResponse response = assetLoader.shouldInterceptRequest(uri);
+                        if (response != null) {
+                            return response;
+                        }
+                    }
+
+                    // 2. Teruskan request API / media ke server backend Render secara transparan
+                    if (path != null && (path.startsWith("/api/") || path.startsWith("/effects/") || path.startsWith("/runtime/effects/") || path.endsWith(".m4a") || path.endsWith(".mp3"))) {
+                        String remoteTarget = REMOTE_BACKEND_URL + path + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
+                        return proxyRemoteRequest(request, remoteTarget);
+                    }
+                }
+
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url == null) return false;
                 if (url.startsWith(RETRY_URL)) {
@@ -119,7 +163,7 @@ public class MainActivity extends Activity {
                 }
                 Uri uri = Uri.parse(url);
                 String host = uri.getHost();
-                if (host != null && host.equalsIgnoreCase(APP_HOST)) {
+                if (host != null && (host.equalsIgnoreCase(APP_HOST) || host.contains("onrender.com"))) {
                     return false; // tetap di dalam aplikasi
                 }
                 if (url.startsWith("http://") || url.startsWith("https://")) {
@@ -135,9 +179,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (url != null && (url.startsWith("https://" + APP_HOST) || url.startsWith("http://" + APP_HOST))) {
-                    hideLoading();
-                }
+                hideLoading();
                 injectAndroidBridge();
             }
 
@@ -239,12 +281,74 @@ public class MainActivity extends Activity {
     }
 
     private void loadApp() {
-        showLoading("Menghubungkan ke server...");
-        java.util.Map<String, String> extraHeaders = new java.util.HashMap<>();
-        extraHeaders.put("Cache-Control", "no-cache, no-store, must-revalidate");
-        extraHeaders.put("Pragma", "no-cache");
-        extraHeaders.put("Expires", "0");
-        webView.loadUrl(APP_URL, extraHeaders);
+        showLoading("Membuka studio...");
+        webView.loadUrl(LOCAL_URL);
+    }
+
+    private void triggerBackgroundKeepAlive() {
+        new Thread(() -> {
+            try {
+                java.net.URL url = new java.net.URL(REMOTE_BACKEND_URL + "/health");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.getResponseCode();
+                conn.disconnect();
+                Log.d("XEDITZ_PING", "Keep-alive ping sent to " + REMOTE_BACKEND_URL);
+            } catch (Exception e) {
+                Log.d("XEDITZ_PING", "Keep-alive ping background: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private WebResourceResponse proxyRemoteRequest(WebResourceRequest request, String targetUrl) {
+        try {
+            java.net.URL url = new java.net.URL(targetUrl);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod(request.getMethod());
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(60000);
+            conn.setInstanceFollowRedirects(true);
+
+            java.util.Map<String, String> headers = request.getRequestHeaders();
+            if (headers != null) {
+                for (java.util.Map.Entry<String, String> entry : headers.entrySet()) {
+                    if (!entry.getKey().equalsIgnoreCase("Host") && !entry.getKey().equalsIgnoreCase("Origin")) {
+                        conn.setRequestProperty(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+            conn.setRequestProperty("Origin", REMOTE_BACKEND_URL);
+
+            int responseCode = conn.getResponseCode();
+            java.io.InputStream stream = (responseCode >= 400) ? conn.getErrorStream() : conn.getInputStream();
+            String contentType = conn.getContentType();
+            String mimeType = "application/octet-stream";
+            String encoding = "utf-8";
+            if (contentType != null) {
+                String[] parts = contentType.split(";");
+                mimeType = parts[0].trim();
+                if (parts.length > 1 && parts[1].toLowerCase().contains("charset=")) {
+                    encoding = parts[1].split("=")[1].trim();
+                }
+            }
+
+            java.util.Map<String, String> responseHeaders = new java.util.HashMap<>();
+            for (java.util.Map.Entry<String, java.util.List<String>> entry : conn.getHeaderFields().entrySet()) {
+                if (entry.getKey() != null && !entry.getValue().isEmpty()) {
+                    responseHeaders.put(entry.getKey(), entry.getValue().get(0));
+                }
+            }
+            responseHeaders.put("Access-Control-Allow-Origin", "*");
+            responseHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+            responseHeaders.put("Access-Control-Allow-Headers", "*");
+
+            return new WebResourceResponse(mimeType, encoding, responseCode, conn.getResponseMessage(), responseHeaders, stream);
+        } catch (Exception e) {
+            Log.w("XEDITZ_PROXY", "Proxy fallback error for " + targetUrl + ": " + e.getMessage());
+            return null;
+        }
     }
 
     private void injectAndroidBridge() {

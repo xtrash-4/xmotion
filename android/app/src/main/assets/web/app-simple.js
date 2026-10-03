@@ -142,9 +142,9 @@ function registerXmlMediaUsage(xmlTexts, names) {
   }
 }
 
-// Base API configuration (mendukung localhost, domain Render online, maupun APK Android file:///)
+// Base API configuration (mendukung localhost, domain Render online, maupun APK Android via WebViewAssetLoader / file:///)
 window.__RENDER_API_URL = 'https://xmotion-5tnu.onrender.com';
-window.__API_BASE = localStorage.getItem('XPREST_API_BASE') || (location.protocol === 'file:' ? window.__RENDER_API_URL : '');
+window.__API_BASE = localStorage.getItem('XPREST_API_BASE') || ((location.protocol === 'file:' || location.hostname === 'appassets.androidplatform.net') ? window.__RENDER_API_URL : '');
 
 // XML dari link Alight Motion & Auto-routing API untuk APK Android
 (function patchGlobalFetch() {
