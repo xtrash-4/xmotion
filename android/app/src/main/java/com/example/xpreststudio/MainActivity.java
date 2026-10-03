@@ -149,7 +149,8 @@ public class MainActivity extends Activity {
                     // 2. Teruskan request API / media ke server backend Render secara transparan
                     if ((host.equalsIgnoreCase(APP_HOST) || host.contains("onrender.com")) && path != null &&
                             (path.startsWith("/api/") || path.startsWith("/effects/") || path.startsWith("/runtime/effects/") || path.endsWith(".m4a") || path.endsWith(".mp3"))) {
-                        String remoteTarget = REMOTE_BACKEND_URL + path + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
+                        String query = uri.getEncodedQuery();
+                        String remoteTarget = REMOTE_BACKEND_URL + path + (query != null ? "?" + query : "");
                         return proxyRemoteRequest(request, remoteTarget);
                     }
                 }
@@ -306,6 +307,14 @@ public class MainActivity extends Activity {
     }
 
     private WebResourceResponse proxyRemoteRequest(WebResourceRequest request, String targetUrl) {
+        // Tangani preflight OPTIONS langsung tanpa perlu koneksi remote untuk mencegah 405
+        if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            java.util.Map<String, String> optHeaders = new java.util.HashMap<>();
+            optHeaders.put("Access-Control-Allow-Origin", "*");
+            optHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+            optHeaders.put("Access-Control-Allow-Headers", "*");
+            return new WebResourceResponse("text/plain", "utf-8", 200, "OK", optHeaders, new java.io.ByteArrayInputStream(new byte[0]));
+        }
         try {
             java.net.URL url = new java.net.URL(targetUrl);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();

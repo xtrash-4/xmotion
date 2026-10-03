@@ -26,6 +26,14 @@ import uvicorn
 
 app = FastAPI(title="Retro Y2K Jedag-Jedug Studio")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
